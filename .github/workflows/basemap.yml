@@ -42,6 +42,16 @@ jobs:
           echo "$build" > site/build.txt
           ls -lh site
 
+      - name: Add a home page that points to the app
+        run: |
+          cat > site/index.html <<'EOF'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Yemen Map</title>
+          <meta http-equiv="refresh" content="0; url=https://yemen-map.vercel.app/">
+          <p>This address hosts the base map tiles for <a href="https://yemen-map.vercel.app/">Yemen Map</a>.</p>
+          EOF
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
