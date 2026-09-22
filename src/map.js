@@ -4,12 +4,22 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import rtlPluginUrl from '../node_modules/@mapbox/mapbox-gl-rtl-text/dist/mapbox-gl-rtl-text.js?url';
 
 // Arabic labels need the RTL plugin for shaping and right-to-left order.
-maplibregl.setRTLTextPlugin(rtlPluginUrl, false);
+// Deferred: it downloads only once Arabic text is on the map.
+maplibregl.setRTLTextPlugin(rtlPluginUrl, true);
 
-const PMTILES_URL = import.meta.env.VITE_PMTILES_URL;
+// Folder holding region.pmtiles and yemen.pmtiles (see .github/workflows/basemap.yml).
+const BASEMAP_URL = import.meta.env.VITE_BASEMAP_URL;
 const ASSETS = 'https://protomaps.github.io/basemaps-assets';
 
+// region.pmtiles is wide but stops at this zoom; yemen.pmtiles has the detail from here on.
+const DETAIL_ZOOM = 6;
+
 export const YEMEN_BOUNDS = [41.8, 12.0, 54.6, 19.1];
+// Same area as region.pmtiles, so panning never runs off the base map.
+const MAX_BOUNDS = [
+  [20, -12],
+  [78, 38],
+];
 
 const color = {
   bg: '#dce4e6',
@@ -26,23 +36,48 @@ const color = {
 };
 
 async function basemap(lang) {
-  if (!PMTILES_URL) return { sources: {}, layers: [] };
-  const [{ Protocol }, { layers, namedFlavor }] = await Promise.all([
+  const none = { sources: {}, layers: [] };
+  if (!BASEMAP_URL) return none;
+  const [{ PMTiles, Protocol }, { layers, namedFlavor }] = await Promise.all([
     import('pmtiles'),
     import('@protomaps/basemaps'),
   ]);
-  maplibregl.addProtocol('pmtiles', new Protocol().tile);
-  return {
-    sources: {
-      protomaps: {
-        type: 'vector',
-        url: `pmtiles://${PMTILES_URL}`,
-        attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>',
-      },
-    },
-    layers: layers('protomaps', namedFlavor('light'), { lang }),
-    relabel: (l) => layers('protomaps', namedFlavor('light'), { lang: l, labelsOnly: true }),
-  };
+  const archives = ['region', 'yemen'].map((name) => [name, new PMTiles(`${BASEMAP_URL}/${name}.pmtiles`)]);
+  try {
+    await Promise.all(archives.map(([, archive]) => archive.getHeader()));
+  } catch (err) {
+    // The map still works on its own, e.g. before the tiles are first published.
+    console.warn('Base map unavailable, continuing without it.', err);
+    return none;
+  }
+
+  const protocol = new Protocol();
+  const sources = {};
+  for (const [name, archive] of archives) {
+    protocol.add(archive);
+    sources[name] = {
+      type: 'vector',
+      url: `pmtiles://${archive.source.getKey()}`,
+      attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>',
+    };
+  }
+  maplibregl.addProtocol('pmtiles', protocol.tile);
+
+  // The region style draws everywhere (overzoomed past DETAIL_ZOOM) with its labels up to
+  // DETAIL_ZOOM; the Yemen style draws on top of it from DETAIL_ZOOM.
+  const flavor = namedFlavor('light');
+  const style = (l, labelsOnly = false) => [
+    ...layers('region', flavor, { lang: l, labelsOnly }).map((layer) => ({
+      ...layer,
+      id: `region-${layer.id}`,
+      ...(layer.type === 'symbol' && { maxzoom: Math.min(layer.maxzoom ?? 24, DETAIL_ZOOM) }),
+    })),
+    ...layers('yemen', flavor, { lang: l, labelsOnly })
+      .filter((layer) => layer.type !== 'background')
+      .map((layer) => ({ ...layer, minzoom: Math.max(layer.minzoom ?? 0, DETAIL_ZOOM) })),
+  ];
+
+  return { sources, layers: style(lang), relabel: (l) => style(l, true) };
 }
 
 export async function createMap(container, lang, padding) {
@@ -54,10 +89,7 @@ export async function createMap(container, lang, padding) {
     container,
     bounds: YEMEN_BOUNDS,
     fitBoundsOptions: { padding },
-    maxBounds: [
-      [34, 7],
-      [62, 24],
-    ],
+    maxBounds: MAX_BOUNDS,
     attributionControl: false,
     style: {
       version: 8,
@@ -76,8 +108,9 @@ export async function createMap(container, lang, padding) {
         'district-labels': { type: 'geojson', data: src('district-labels.geojson') },
       },
       layers: [
-        { id: 'background', type: 'background', paint: { 'background-color': color.bg } },
-        ...base.layers.filter((l) => l.type !== 'symbol'),
+        ...(hasBase
+          ? base.layers.filter((l) => l.type !== 'symbol')
+          : [{ id: 'background', type: 'background', paint: { 'background-color': color.bg } }]),
         {
           id: 'gov-fill',
           type: 'fill',

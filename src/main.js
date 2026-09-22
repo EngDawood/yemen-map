@@ -1,5 +1,5 @@
-import '@fontsource/ibm-plex-sans-arabic/400.css';
-import '@fontsource/ibm-plex-sans-arabic/600.css';
+// Only the Sans family; the browser fetches each weight from the CDN the first time it is used.
+import '@dawod/thmanyah-font-web/sans.css';
 import './style.css';
 import { createMap, YEMEN_BOUNDS } from './map.js';
 import { createIndex, search } from './search.js';

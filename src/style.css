@@ -8,7 +8,7 @@
   --accent: #b3261e;
   --radius: 12px;
   --panel-w: 360px;
-  font-family: 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  font-family: 'Thmanyah Sans', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
   color: var(--text);
   background: var(--bg);
 }
@@ -215,7 +215,7 @@ h3 small {
 
 .stat dd {
   margin: 2px 0 0;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 1.05rem;
 }
 

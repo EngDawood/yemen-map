@@ -45,21 +45,28 @@ Sources:
 
 District Arabic names come from the source as published, so some use ه in place of ة.
 
-## Base map (optional)
+## Base map
 
-Without configuration the map draws only the boundaries on a plain background. To add a Protomaps base map, extract Yemen from a Protomaps daily build and host the file (for example on Cloudflare R2, with CORS allowing your site):
+The base map is two [Protomaps](https://protomaps.com) PMTiles files cut from OpenStreetMap:
 
-```sh
-pmtiles extract https://build.protomaps.com/20260901.pmtiles yemen.pmtiles --bbox=41.5,11.8,54.8,19.2
-```
+| File | Area | Zooms | Size |
+| --- | --- | --- | --- |
+| `region.pmtiles` | Wide box around Yemen (the map's pan limit) | 0 to 6 | about 5 MB |
+| `yemen.pmtiles` | Yemen plus a margin | 0 to 13 | about 60 MB |
 
-Then set the URL at build time:
+The zoomed-out views use the region file and the Yemen file takes over from zoom 6. The browser fetches only the tiles on screen, through HTTP range requests, so visitors never download the whole file.
 
-```sh
-VITE_PMTILES_URL=https://your-bucket.example.com/yemen.pmtiles npm run build
-```
+`.github/workflows/basemap.yml` builds both files from the latest Protomaps daily planet build every Monday (or on demand from the Actions tab) and publishes them to this repo's GitHub Pages site. `.env` points the app there through `VITE_BASEMAP_URL`. If the files can't be reached, the map loads without a base map.
+
+One-time setup: the repo must be public (GitHub Pages needs a paid plan for private repos), and under Settings > Pages the source must be "GitHub Actions".
+
+To build the files by hand, install the [pmtiles CLI](https://github.com/protomaps/go-pmtiles) and run the two `extract` commands from the workflow.
 
 Map label fonts and base map sprites load from `protomaps.github.io/basemaps-assets`.
+
+## Fonts
+
+The interface uses Thmanyah Sans from [`@dawod/thmanyah-font-web`](https://www.npmjs.com/package/@dawod/thmanyah-font-web). Font files stream from jsDelivr, and the browser fetches only the weights the page uses (400 and 700), with a fallback font shown until they arrive. The [Thmanyah license](https://font.thmanyah.com/licenses) allows personal use; commercial use needs permission from Thmanyah.
 
 ## Deploy
 
@@ -67,8 +74,6 @@ Any static host works. Build command `npm run build`, output directory `dist`.
 
 - **Vercel**: import the repo; the Vite preset is detected automatically.
 - **Cloudflare Pages**: framework preset "Vite", same command and output.
-
-Add `VITE_PMTILES_URL` as an environment variable in the host's settings if you use a base map.
 
 ## Roadmap
 

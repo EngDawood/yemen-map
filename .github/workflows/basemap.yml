@@ -1,0 +1,57 @@
+# Cuts the base map out of the latest Protomaps daily planet build and publishes it
+# on this repo's GitHub Pages site, which serves byte ranges with CORS:
+#   region.pmtiles  wide area around Yemen, zooms 0-6 (about 5 MB)
+#   yemen.pmtiles   Yemen plus a margin, zooms 0-13 (about 60 MB)
+# The region box must match MAX_BOUNDS in src/map.js.
+name: Base map
+
+on:
+  schedule:
+    - cron: '0 3 * * 1' # Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Install pmtiles
+        run: go install github.com/protomaps/go-pmtiles@v1.31.2
+
+      - name: Extract tiles
+        run: |
+          build=$(curl -fsSL https://build-metadata.protomaps.dev/builds.json | jq -r 'max_by(.key).key')
+          echo "Protomaps build: $build"
+          pmtiles="$(go env GOPATH)/bin/go-pmtiles"
+          mkdir -p site
+          "$pmtiles" extract "https://build.protomaps.com/$build" site/region.pmtiles --bbox=20,-12,78,38 --maxzoom=6
+          "$pmtiles" extract "https://build.protomaps.com/$build" site/yemen.pmtiles --bbox=41,11,55.5,19.8 --maxzoom=13
+          echo "$build" > site/build.txt
+          ls -lh site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
