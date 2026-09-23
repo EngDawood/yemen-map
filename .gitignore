@@ -3,3 +3,5 @@ dist/
 data-raw/
 .env*.local
 .DS_Store
+.wrangler/
+.dev.vars

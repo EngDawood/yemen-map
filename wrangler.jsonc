@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // The Worker serves the built site (dist/client, set by the Vite plugin) and the Ghurba API.
+  "name": "yemen-map",
+  "main": "./worker/index.js",
+  "compatibility_date": "2026-09-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ghurba",
+      "database_id": "0a9b5c5f-08bb-40c8-b255-85d142dcfaa6",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Clears device hashes older than 30 days.
+  "triggers": { "crons": ["30 3 * * *"] },
+  // Logs from console.error only: per-request logs would record visitors' IPs and locations.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
+  // Secrets (TURNSTILE_SECRET, HASH_SALT, ADMIN_TOKEN) are set with `npx wrangler secret put NAME`
+  // and come from .dev.vars locally. Without them the API answers "setup" or stays locked.
+}

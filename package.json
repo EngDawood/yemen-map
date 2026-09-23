@@ -1,12 +1,16 @@
 {
   "name": "yemen-map",
   "version": "1.0.0",
-  "description": "Interactive Arabic-first explorer of Yemen governorates and districts",
+  "description": "Interactive Arabic-first explorer of Yemen governorates and districts, and the Ghurba map of Yemenis abroad",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "data": "node scripts/build-data.mjs"
+    "deploy": "npm run build && wrangler deploy",
+    "data": "node scripts/build-data.mjs",
+    "data:ghurba": "node scripts/build-ghurba-data.mjs",
+    "db:migrate": "wrangler d1 migrations apply ghurba --remote",
+    "db:migrate:local": "wrangler d1 migrations apply ghurba --local"
   },
   "repository": {
     "type": "git",
@@ -21,12 +25,15 @@
     "@dawod/thmanyah-font-web": "^1.2.0",
     "@mapbox/mapbox-gl-rtl-text": "^0.4.0",
     "@protomaps/basemaps": "^5.7.2",
+    "d3-geo": "^3.1.1",
     "maplibre-gl": "^5.24.0",
     "pmtiles": "^4.5.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.57.3",
     "mapshaper": "^0.7.66",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "wrangler": "^4.136.3"
   },
   "type": "module",
   "private": true

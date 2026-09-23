@@ -1,0 +1,147 @@
+:root {
+  --bg: #fbf8f2;
+  --surface: #ffffff;
+  --text: #2b241b;
+  --muted: #7a6d5b;
+  --line: #e8dfcf;
+  --hover: #f4ecdd;
+  --accent: #b3261e;
+  font-family: 'Thmanyah Sans', system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Keep the hidden attribute working on elements that set their own display. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 16px 60px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--hover);
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+#login {
+  display: grid;
+  gap: 8px;
+  max-width: 360px;
+}
+
+#login input {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.error {
+  color: var(--accent);
+}
+
+.note {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.tabs [aria-selected='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+#rows {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#rows li {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+#rows li.is-hidden {
+  opacity: 0.6;
+}
+
+.msg {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 1.05rem;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-size: 0.8rem;
+}

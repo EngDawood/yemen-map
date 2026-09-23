@@ -48,8 +48,8 @@ jobs:
           <!doctype html>
           <meta charset="utf-8">
           <title>Yemen Map</title>
-          <meta http-equiv="refresh" content="0; url=https://yemen-map.vercel.app/">
-          <p>This address hosts the base map tiles for <a href="https://yemen-map.vercel.app/">Yemen Map</a>.</p>
+          <meta http-equiv="refresh" content="0; url=https://yemen-map.dawod.workers.dev/">
+          <p>This address hosts the base map tiles for <a href="https://yemen-map.dawod.workers.dev/">Yemen Map</a>.</p>
           EOF
 
       - uses: actions/upload-pages-artifact@v3

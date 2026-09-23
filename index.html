@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="خريطة تفاعلية لمحافظات ومديريات اليمن" />
+    <meta name="description" content="خريطة تفاعلية لمحافظات ومديريات اليمن، وخريطة الغربة: خط لكل يمني في الخارج من مديريته إلى مدينته" />
     <title>خريطة اليمن</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <!-- Thmanyah font files stream from jsDelivr. -->
@@ -17,6 +17,10 @@
         <div class="brand">
           <h1 id="app-title"></h1>
           <button id="lang-toggle" type="button"></button>
+        </div>
+        <div id="modes" class="modes" role="group">
+          <button type="button" data-mode="yemen"></button>
+          <button type="button" data-mode="ghurba"></button>
         </div>
         <div class="search">
           <input
@@ -35,6 +39,9 @@
       <div id="panel-body"></div>
       <footer id="panel-foot"></footer>
     </aside>
+
+    <!-- "Draw your line" form, filled by src/add-line.js. -->
+    <dialog id="add-dialog"></dialog>
 
     <script type="module" src="/src/main.js"></script>
   </body>
