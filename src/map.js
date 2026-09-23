@@ -225,7 +225,7 @@ export async function createMap(container, lang, padding, { lite = false } = {})
     pick(point) {
       const [c] = map.queryRenderedFeatures(point, { layers: ['g-cities'] });
       if (c) return { type: 'city', id: c.properties.id };
-      const [d] = map.queryRenderedFeatures(point, { layers: ['district-fill'] });
+      const [d] = map.queryRenderedFeatures(point, { layers: ['district-fill', 'g-districts'] });
       if (d) return { type: 'district', id: d.properties.id };
       const [g] = map.queryRenderedFeatures(point, { layers: ['gov-fill'] });
       if (g) return { type: 'gov', id: g.properties.id };

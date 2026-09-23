@@ -1,10 +1,12 @@
 // Ghurba mode: the map of Yemenis abroad. Loads the aggregated lines, draws them on the globe
-// and fills the side panel: the counter, exploring by governorate or city, messages, your card.
+// and fills the side panel: the counter, exploring by governorate or city, messages, the steps
+// to draw your line, your journey and your card.
 import { greatCircle } from './globe.js';
 import { createGhurbaIndex, search } from './search.js';
 import { strings, fmt, plural, fill } from './i18n.js';
 import { esc, stat, crumbs } from './ui.js';
-import { openAddLine, closeAddLine, addLineOpen } from './add-line.js';
+import { createAddLine } from './add-line.js';
+import { journey, loadJourneys, loadLand } from './journey.js';
 import { renderCard } from './card.js';
 import { countryName, regionNames } from './countries.js';
 
@@ -30,7 +32,9 @@ function saveMine(m) {
 
 export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
   const globe = mapApi.globe;
-  const view = { gov: null, city: null, mine: false };
+  // adding: the steps to draw your line are open. mine: your journey and card.
+  const view = { gov: null, city: null, mine: false, adding: false };
+  let arriving = false; // just sent: the sentence waits until the journey arrives
   let status = 'idle'; // idle | loading | ready | error
   let cities = [];
   let cityById = new Map();
@@ -39,7 +43,7 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
   let lines = []; // [{ d: district id, c: city id, n }]
   let messages = []; // [{ g: governorate id, c: city id, m: text }]
   let agg = aggregate();
-  let mine = readMine(); // { d, c, n } once this browser has drawn its line
+  let mine = readMine(); // { d, c, n, mode } once this browser has drawn its line
   let card = null; // { key, blob, url }
   let loading = null;
 
@@ -51,9 +55,23 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
   const listCount = (n) => (n >= SHOW_FROM ? fmt(n, state.lang) : '');
   const statCount = (n) => (n >= SHOW_FROM ? fmt(n, state.lang) : t('under3'));
   const origin = (d) => data.districts[d].center;
-  const overview = () => !view.gov && !view.city && !view.mine;
+  const center = (c) => cityById.get(c).center;
+  const overview = () => !view.gov && !view.city && !view.mine && !view.adding;
+  // Lines saved before journeys had a way to travel are plain lines.
+  const myJourney = () => journey(origin(mine.d), center(mine.c), mine.mode ?? 'direct');
 
-  globe.canSpin = () => state.mode === 'ghurba' && overview() && !addLineOpen();
+  const steps = createAddLine({
+    state,
+    data,
+    mapApi,
+    padding,
+    cities: () => cityById,
+    searchCities: (q) => search(cityIndex, q, 8),
+    countryName,
+    onAdded: added,
+  });
+
+  globe.canSpin = () => state.mode === 'ghurba' && overview();
   for (const type of ['mousedown', 'touchstart', 'wheel']) {
     mapApi.map.on(type, () => state.mode === 'ghurba' && globe.pauseForUser());
   }
@@ -67,7 +85,8 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     const json = (url) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${url}`))));
     const linesReq = json('/api/lines');
     linesReq.catch(() => {}); // handled below, after the cities
-    globe.setLand(`${base}data/land.geojson`);
+    const journeys = loadJourneys(); // land and seas, for the car's legs; never fails
+    loadLand().then(globe.setLand, () => {});
     try {
       cities = await json(`${base}data/cities.json`);
       cityById = new Map(cities.map((c) => [c.id, c]));
@@ -82,6 +101,7 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
       console.warn('Ghurba data unavailable.', err);
       status = 'error';
     }
+    await journeys;
     // The public counts are cached for a minute; keep this browser's own line on its map.
     if (mine && !lines.some((l) => l.d === mine.d && l.c === mine.c) && cityById.has(mine.c)) {
       lines.push({ d: mine.d, c: mine.c, n: 1 });
@@ -117,7 +137,7 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     return lines.map(({ d, c, n }) => ({
       type: 'Feature',
       properties: { d, c, g: d.slice(0, 4), n },
-      geometry: greatCircle(origin(d), cityById.get(c).center),
+      geometry: greatCircle(origin(d), center(c)),
     }));
   }
 
@@ -146,37 +166,69 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
         ? new Map([[city, agg.byCity.get(city)?.n ?? 0]])
         : new Map([...agg.byCity].map(([id, c]) => [id, c.n]));
     globe.setCities(cityFeatures(counts), state.lang);
+    globe.focus(view.mine || view.adding);
+    if (view.adding) return; // the steps draw their own picks and preview
     globe.highlightGovs(gov ? [gov] : city ? [...(agg.byCity.get(city)?.govs.keys() ?? [])] : null);
+    // Your journey, ends marked, in your own view; elsewhere your line is a plain line like the others.
     const mineHere = mine && (view.mine || overview() || gov === mine.d.slice(0, 4) || city === mine.c);
-    if (!mineHere) globe.clearMine();
-    else if (drawMine) globe.drawMine(origin(mine.d), cityById.get(mine.c).center, false);
+    globe.markFrom(mineHere && view.mine ? origin(mine.d) : null);
+    globe.markTo(mineHere && view.mine ? center(mine.c) : null);
+    if (!mineHere) globe.clearJourney();
+    else if (drawMine) {
+      const j = view.mine ? myJourney() : journey(origin(mine.d), center(mine.c), 'direct');
+      globe.drawJourney(j, { animate: false, lang: state.lang });
+    }
   }
 
   function select({ gov = null, city = null, mine: showMine = false } = {}) {
     const wasOverview = overview();
-    Object.assign(view, { gov, city, mine: showMine && !!mine });
+    if (view.adding) steps.close();
+    arriving = false;
+    Object.assign(view, { gov, city, mine: showMine && !!mine, adding: false });
     applyView();
-    if (view.city) globe.frameLine(YEMEN, cityById.get(view.city).center, padding());
-    else if (view.mine) globe.frameLine(origin(mine.d), cityById.get(mine.c).center, padding());
+    if (view.city) globe.frameLine(YEMEN, center(view.city), padding());
+    else if (view.mine) globe.frameLine(origin(mine.d), center(mine.c), padding());
     else if (view.gov || !wasOverview) globe.overview(padding()); // the whole globe; spins only in the overview
     render();
     onChange();
   }
 
-  // After a successful submission: count the line, fly to it and draw it.
-  function added({ d, c, n }) {
-    mine = { d, c, n };
+  function openSteps() {
+    if (!cityById.size) return; // the cities did not load
+    arriving = false;
+    Object.assign(view, { gov: null, city: null, mine: false, adding: true });
+    applyView();
+    steps.open();
+    render();
+    onChange();
+  }
+
+  // After a successful submission: count the line, fly to it, and send the vehicle on its way.
+  // The sentence and the card wait until it arrives.
+  function added({ d, c, n }, mode) {
+    steps.close();
+    mine = { d, c, n, mode };
     saveMine(mine);
     const line = lines.find((l) => l.d === d && l.c === c);
     if (line) line.n += 1;
     else lines.push({ d, c, n: 1 });
     agg = aggregate();
     globe.setLines(lineFeatures());
-    Object.assign(view, { gov: null, city: null, mine: true });
+    Object.assign(view, { gov: null, city: null, mine: true, adding: false });
+    arriving = true;
     applyView({ drawMine: false });
-    globe.clearMine();
-    globe.frameLine(origin(d), cityById.get(c).center, padding());
-    mapApi.map.once('moveend', () => globe.drawMine(origin(d), cityById.get(c).center, true));
+    globe.clearJourney();
+    globe.frameLine(origin(d), center(c), padding());
+    mapApi.map.once('moveend', () => {
+      if (!arriving) return; // the visitor moved on
+      globe.drawJourney(myJourney(), {
+        lang: state.lang,
+        onArrive: () => {
+          arriving = false;
+          render();
+        },
+      });
+    });
     render();
     onChange();
   }
@@ -297,9 +349,11 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
   const siteUrl = () => `${location.origin}/?view=ghurba`;
 
   function renderMine() {
+    const path = crumbs([[t('ghurbaTitle'), 'data-ghome'], [t('myCard')]]);
+    if (arriving) return `${path}<p class="moment">${esc(fill(t('onTheWay'), { city: cityName(mine.c) }))}</p>`;
     const text = `${sentence(false)}\n${t('shareText')} ${siteUrl()}`;
     return `
-      ${crumbs([[t('ghurbaTitle'), 'data-ghome'], [t('myCard')]])}
+      ${path}
       <p class="moment">${sentence(true)}</p>
       <figure class="card-preview"><img id="card-img" alt="${esc(t('cardAlt'))}" hidden /></figure>
       <div class="share">
@@ -309,15 +363,14 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
       </div>`;
   }
 
-  // The card is drawn on a canvas once per line, language and count, then reused.
-  const cardKey = () => `${state.lang}|${mine.d}|${mine.c}|${sentence(false)}`;
+  // The card is drawn on a canvas once per line, way to travel, language and count, then reused.
+  const cardKey = () => `${state.lang}|${mine.d}|${mine.c}|${mine.mode}|${sentence(false)}`;
 
   async function fillCard() {
     const key = cardKey();
     if (card?.key !== key) {
       const blob = await renderCard({
-        from: origin(mine.d),
-        to: cityById.get(mine.c).center,
+        journey: myJourney(),
         sentence: sentence(false),
         brand: t('cardBrand'),
         call: `${t('cardCall')} · ${location.host}`,
@@ -348,6 +401,7 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
 
   function render() {
     if (state.mode !== 'ghurba') return;
+    if (view.adding) return steps.render(body);
     const showMine = view.mine && mine && status !== 'loading' && cityById.has(mine.c);
     body.innerHTML = showMine
       ? renderMine()
@@ -362,34 +416,24 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     if (showMine) fillCard().catch((err) => console.error('Card failed', err));
   }
 
-  function openAdd() {
-    globe.stopSpin();
-    openAddLine({
-      lang: state.lang,
-      data,
-      cities: cityById,
-      searchCities: (q) => search(cityIndex, q, 8),
-      countryName,
-      onAdded: added,
-      onClose: () => globe.startSpin(),
-    });
-  }
-
   return {
     async enter(initial = {}) {
-      Object.assign(view, { gov: initial.gov ?? null, city: initial.city ?? null, mine: false });
+      arriving = false;
+      Object.assign(view, { gov: initial.gov ?? null, city: initial.city ?? null, mine: false, adding: false });
       globe.enter(padding());
       render();
       if (status === 'idle' || status === 'error') {
         loading ??= load().finally(() => (loading = null));
         await loading;
       } else applyView();
-      if (view.city && cityById.has(view.city)) globe.frameLine(YEMEN, cityById.get(view.city).center, padding());
+      if (view.city && cityById.has(view.city)) globe.frameLine(YEMEN, center(view.city), padding());
       else if (view.city) select({});
     },
 
     leave() {
-      closeAddLine();
+      steps.close();
+      view.adding = false;
+      arriving = false;
       globe.leave();
     },
 
@@ -410,11 +454,14 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     },
 
     choose(hit) {
+      if (view.adding) return steps.searchPick(hit);
       select(hit.type === 'gov' ? { gov: hit.id } : { city: hit.id });
     },
 
-    // A click on the globe: a city, one of Yemen's governorates, or empty space.
-    click(hit) {
+    // A click on the globe: a city, one of Yemen's governorates, or empty space. While the steps
+    // are open it picks for them instead.
+    click(hit, lngLat) {
+      if (view.adding) return steps.mapClick(hit, lngLat);
       if (hit?.type === 'city') select({ city: hit.id });
       else if (hit?.type === 'gov') select({ gov: hit.id });
       else if (!overview()) select({});
@@ -424,13 +471,14 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
       if ('ghome' in b.dataset) select({});
       else if (b.dataset.city) select({ city: b.dataset.city });
       else if (b.dataset.gov) select({ gov: b.dataset.gov });
-      else if ('add' in b.dataset) openAdd();
+      else if ('add' in b.dataset) openSteps();
       else if ('mine' in b.dataset) select({ mine: true });
       else if (b.id === 'share-story') shareStory();
     },
 
-    // Escape goes back to the overview.
+    // Escape closes the question on the map, or goes back to the overview.
     back() {
+      if (view.adding && steps.back()) return true;
       if (overview()) return false;
       select({});
       return true;

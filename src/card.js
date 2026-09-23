@@ -1,19 +1,42 @@
-// The share card: a square PNG drawn in the browser, with the visitor's line on a small globe,
+// The share card: a square PNG drawn in the browser, with the visitor's journey on a small globe,
 // the "you are one of N" sentence and the site's address. Nothing is sent to a server.
 import { geoDistance, geoGraticule10, geoInterpolate, geoOrthographic, geoPath } from 'd3-geo';
+import { COLORS, ICONS, loadLand } from './journey.js';
 
 const SIZE = 1080;
 const FONT = "'Thmanyah Sans', system-ui, sans-serif";
-let land = null;
 
-function loadLand() {
-  land ??= fetch(`${import.meta.env.BASE_URL}data/land.geojson`)
-    .then((r) => r.json())
-    .catch((err) => {
-      land = null;
-      throw err;
-    });
-  return land;
+// Each kind of leg as on the globe: the plain line glows amber, the road is solid, the air and
+// the sea are dashed.
+const LEG_STYLE = {
+  direct: { color: '#ffc65c', glow: '#ff9a2e', width: 6 },
+  air: { color: COLORS.air, glow: 'rgba(255, 255, 255, 0.6)', width: 5, dash: [16, 12] },
+  land: { color: COLORS.land, glow: COLORS.land, width: 6 },
+  sea: { color: COLORS.sea, glow: COLORS.sea, width: 5, dash: [16, 12] },
+};
+
+// The vehicle in a round badge at x, y, facing angle (radians, on the canvas).
+function drawVehicle(ctx, x, y, kind, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  ctx.arc(0, 0, 34, 0, 2 * Math.PI);
+  ctx.fillStyle = 'rgba(11, 26, 46, 0.92)';
+  ctx.shadowColor = COLORS[kind];
+  ctx.shadowBlur = 18;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = COLORS[kind];
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // The plane turns with the way; the car and the ship look left or right.
+  if (kind === 'air') ctx.rotate(angle + Math.PI / 2);
+  else if (Math.cos(angle) < 0) ctx.scale(-1, 1);
+  ctx.scale(44 / 24, 44 / 24);
+  ctx.translate(-12, -12);
+  ctx.fillStyle = COLORS[kind];
+  ctx.fill(new Path2D(ICONS[kind]), 'evenodd');
+  ctx.restore();
 }
 
 // Splits text into lines that fit maxWidth at the current font.
@@ -30,8 +53,10 @@ function wrap(ctx, text, maxWidth) {
   return [...lines, line];
 }
 
-// from, to: [lon, lat]. Resolves to a PNG Blob.
-export async function renderCard({ from, to, sentence, brand, call, lang }) {
+// journey: see journey.js. Resolves to a PNG Blob.
+export async function renderCard({ journey, sentence, brand, call, lang }) {
+  const from = journey.legs[0].coords[0];
+  const to = journey.legs.at(-1).coords.at(-1);
   const [world] = await Promise.all([
     loadLand(),
     document.fonts.load(`700 60px ${FONT}`, sentence),
@@ -103,17 +128,21 @@ export async function renderCard({ from, to, sentence, brand, call, lang }) {
   ctx.fillStyle = '#20385a';
   ctx.fill();
 
-  // d3 draws a LineString on the sphere as a great circle.
-  ctx.save();
-  ctx.shadowColor = '#ff9a2e';
-  ctx.shadowBlur = 26;
-  ctx.strokeStyle = '#ffc65c';
-  ctx.lineWidth = 6;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  path({ type: 'LineString', coordinates: [from, to] });
-  ctx.stroke();
-  ctx.restore();
+  // d3 draws a LineString on the sphere as great-circle arcs.
+  for (const leg of journey.legs) {
+    const style = LEG_STYLE[leg.kind];
+    ctx.save();
+    ctx.shadowColor = style.glow;
+    ctx.shadowBlur = 22;
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = style.width;
+    ctx.lineCap = style.dash ? 'butt' : 'round';
+    ctx.setLineDash(style.dash ?? []);
+    ctx.beginPath();
+    path({ type: 'LineString', coordinates: leg.coords });
+    ctx.stroke();
+    ctx.restore();
+  }
 
   for (const [point, radius, fill] of [
     [from, 8, '#d9a441'],
@@ -125,6 +154,21 @@ export async function renderCard({ from, to, sentence, brand, call, lang }) {
     ctx.arc(x, y, radius, 0, 2 * Math.PI);
     ctx.fillStyle = fill;
     ctx.fill();
+  }
+
+  // The vehicle halfway along the way, on the leg it would be on there.
+  if (journey.mode !== 'direct') {
+    let k = 0;
+    let left = journey.km / 2;
+    while (k < journey.legs.length - 1 && left > journey.legs[k].km) left -= journey.legs[k++].km;
+    const leg = journey.legs[k];
+    const i = Math.min(leg.coords.length - 2, Math.floor((left / leg.km) * (leg.coords.length - 1)));
+    const [here, ahead] = [leg.coords[i], leg.coords[i + 1]];
+    if (geoDistance(here, view) < Math.PI / 2) {
+      const [x, y] = projection(here);
+      const [x2, y2] = projection(ahead);
+      drawVehicle(ctx, x, y, leg.kind, Math.atan2(y2 - y, x2 - x));
+    }
   }
 
   return new Promise((resolve, reject) =>
