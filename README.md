@@ -16,7 +16,7 @@ An Arabic-first interactive explorer of Yemen's 22 governorates and 335 district
 The "الغربة" switch (or `?view=ghurba`) turns the map into a slowly spinning globe. Each Yemeni abroad draws one line, from their district to the city they live in. The spec is in [`ghurba-map.md`](ghurba-map.md).
 
 - Counter: "12,430 Yemenis in 87 countries and 540 cities", with correct Arabic number agreement.
-- Draw your line: governorate and district, then a city search (about 900 cities, Arabic or English, also by country name), an optional message, and a Turnstile check.
+- Draw your line: governorate and district, then a city search (about 900 cities, Arabic or English, also by country name) and an optional message. A Turnstile check runs out of sight; its box appears only if Cloudflare needs the visitor to click.
 - The moment: the camera flies to the new line and draws it, with "أنت واحد من 214 من حجة في الرياض".
 - Share card: a square image drawn in the browser, with WhatsApp, story (Web Share, on phones) and download buttons.
 - Explore: click a governorate ("where are the people of Taiz?") or a city ("where are Jeddah's Yemenis from?"). Links such as `?view=ghurba&gov=taiz` or `&city=105343` open that view.

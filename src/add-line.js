@@ -1,5 +1,6 @@
 // The "draw your line" dialog: district, city and an optional message, checked by Turnstile,
 // then sent to POST /api/lines. Nothing else about the visitor is asked for or sent.
+// The Turnstile box stays hidden unless Cloudflare needs the visitor to click it.
 import { strings } from './i18n.js';
 import { esc } from './ui.js';
 
@@ -183,10 +184,19 @@ export function openAddLine(opts) {
   // ---------- Turnstile ----------
 
   const box = form.querySelector('.turnstile');
+  const waiting = [];
   function resetCheck() {
     token = null;
     if (widget !== null) window.turnstile?.reset(widget);
   }
+  // Resolves with the token once the check passes, or with null after ms.
+  const waitForToken = (ms) =>
+    token
+      ? Promise.resolve(token)
+      : new Promise((resolve) => {
+          waiting.push(resolve);
+          setTimeout(() => resolve(token), ms);
+        });
   loadTurnstile()
     .then((turnstile) => {
       if (!dialog.open) return;
@@ -195,8 +205,10 @@ export function openAddLine(opts) {
         language: lang,
         size: 'flexible',
         theme: 'light',
+        appearance: 'interaction-only',
         callback: (value) => {
           token = value;
+          for (const resolve of waiting.splice(0)) resolve(value);
           if (error.textContent === t('errCheck')) showError('');
         },
         'expired-callback': () => {
@@ -214,11 +226,13 @@ export function openAddLine(opts) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!district.value || !cityId) return showError(t('errPick'));
-    if (!token) return showError(t('errCheck'));
     showError('');
     submit.disabled = true;
     submit.textContent = t('sending');
     try {
+      // The check runs out of sight, so give it time to finish instead of asking to wait.
+      const checked = await waitForToken(30000);
+      if (!checked) return showError(t('errCheck'));
       const res = await fetch('/api/lines', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -226,7 +240,7 @@ export function openAddLine(opts) {
           district_id: district.value,
           city_id: cityId,
           message: message.value.trim() || null,
-          turnstile_token: token,
+          turnstile_token: checked,
         }),
       });
       const body = await res.json().catch(() => ({}));
