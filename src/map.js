@@ -16,7 +16,7 @@ const ASSETS = 'https://protomaps.github.io/basemaps-assets';
 const DETAIL_ZOOM = 6;
 
 export const YEMEN_BOUNDS = [41.8, 12.0, 54.6, 19.1];
-// Same area as region.pmtiles, so panning never runs off the base map. Lifted in Ghurba mode.
+// Same area as region.pmtiles, so panning never runs off the base map before the globe starts.
 export const MAX_BOUNDS = [
   [20, -12],
   [78, 38],
@@ -208,7 +208,6 @@ export async function createMap(container, lang, padding, { lite = false } = {})
     map.getCanvas().style.cursor = hovered ? 'pointer' : '';
   };
 
-  let selectedDistrict = null;
   const controls = [
     new maplibregl.NavigationControl({ visualizePitch: false }),
     new maplibregl.AttributionControl({ compact: true }),
@@ -218,14 +217,14 @@ export async function createMap(container, lang, padding, { lite = false } = {})
 
   const api = {
     map,
-    globe: createGlobe(map, { maxBounds: MAX_BOUNDS, lite }),
+    globe: createGlobe(map, { lite }),
 
-    // Hit test under a point: a Ghurba city, then the visible district, then the governorate.
-    // Hidden layers never match, so this works in both modes.
+    // Hit test under a point: a Ghurba city, then a named district, then the governorate.
+    // Hidden layers never match, so this works on the globe and in the steps.
     pick(point) {
       const [c] = map.queryRenderedFeatures(point, { layers: ['g-cities'] });
       if (c) return { type: 'city', id: c.properties.id };
-      const [d] = map.queryRenderedFeatures(point, { layers: ['district-fill', 'g-districts'] });
+      const [d] = map.queryRenderedFeatures(point, { layers: ['g-districts', 'district-fill'] });
       if (d) return { type: 'district', id: d.properties.id };
       const [g] = map.queryRenderedFeatures(point, { layers: ['gov-fill'] });
       if (g) return { type: 'gov', id: g.properties.id };
@@ -234,32 +233,6 @@ export async function createMap(container, lang, padding, { lite = false } = {})
 
     hover(hit) {
       setHover(hit && { source: sources[hit.type], id: hit.id });
-    },
-
-    // govId and districtId may be null to go back up a level.
-    select(govId, districtId) {
-      const g = govId ?? '';
-      const others = ['!=', ['get', 'id'], g];
-      map.setFilter('district-fill', ['==', ['get', 'gov'], g]);
-      map.setFilter('district-line', ['==', ['get', 'gov'], g]);
-      map.setFilter('district-label', ['==', ['get', 'gov'], g]);
-      map.setFilter('gov-selected', ['==', ['get', 'id'], g]);
-      map.setFilter('gov-label', govId ? others : null);
-      map.setPaintProperty('gov-fill', 'fill-color', [
-        'case',
-        ['boolean', ['feature-state', 'hover'], false],
-        color.landHover,
-        govId ? color.landDim : color.land,
-      ]);
-
-      if (selectedDistrict) map.setFeatureState({ source: 'districts', id: selectedDistrict }, { selected: false });
-      selectedDistrict = districtId;
-      if (districtId) map.setFeatureState({ source: 'districts', id: districtId }, { selected: true });
-      map.setFilter('district-selected', ['==', ['get', 'id'], districtId ?? '']);
-    },
-
-    fit(bbox, padding) {
-      map.fitBounds(bbox, { padding, maxZoom: 10, duration: 900 });
     },
 
     // Controls sit on the side away from the panel, which follows text direction.

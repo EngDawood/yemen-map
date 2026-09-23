@@ -1,27 +1,23 @@
 # خريطة اليمن · Yemen Map
 
-An Arabic-first interactive explorer of Yemen's 22 governorates and 335 districts, built with MapLibre GL JS and Vite, plus the Ghurba map (خريطة الغربة) of Yemenis abroad. It runs on Cloudflare Workers: the site is static files, and a small Worker with a D1 database serves the Ghurba map.
+An Arabic-first interactive explorer of Yemen and of Yemenis abroad — the Ghurba map (خريطة الغربة) — built with MapLibre GL JS and Vite. The app is one view: a slowly spinning globe where each Yemeni abroad draws one line, from their district in Yemen to the city they live in, with Yemen's governorates and districts merged into the same panel. It runs on Cloudflare Workers: the site is static files, and a small Worker with a D1 database serves the lines.
 
 ## Features
 
-- Map of the 22 governorates. Hover highlights one, click zooms to it and opens the side panel.
-- Side panel with Arabic and English names, capital, population, area, density and the district list.
-- Drill down: a selected governorate shows its districts; click a district for its details.
-- Search in Arabic or English: "تعز", "Taiz" and "Ta'iz" all find the same place. Press `/` to focus it.
-- RTL Arabic interface with an English toggle (remembered per browser).
-- Phone layout with a bottom sheet.
-
-### Ghurba map
-
-The "الغربة" switch (or `?view=ghurba`) turns the map into a slowly spinning globe. Each Yemeni abroad draws one line, from their district to the city they live in. The spec is in [`ghurba-map.md`](ghurba-map.md).
-
+- A slowly spinning globe of the lines, drawn over Yemen's governorates as the place every line starts from. The map is the Ghurba map from the first screen — the earlier "اليمن"/"الغربة" switch is gone, and its content lives inside the Ghurba panel.
 - Counter: "12,430 Yemenis in 87 countries and 540 cities", with correct Arabic number agreement.
+- Yemen's directory in the same panel: the country's population, area, governorates and districts; a governorate opens its capital, population, area, density and district list, and a district opens its details and IDP figures — together with where its people are in the world.
 - Draw your line: governorate and district, then a city search (about 900 cities, Arabic or English, also by country name) and an optional message. A Turnstile check runs out of sight; its box appears only if Cloudflare needs the visitor to click.
 - The moment: the camera flies to the new line and draws it, with "أنت واحد من 214 من حجة في الرياض".
 - Share card: a square image drawn in the browser, with WhatsApp, story (Web Share, on phones) and download buttons.
-- Explore: click a governorate ("where are the people of Taiz?") or a city ("where are Jeddah's Yemenis from?"). Links such as `?view=ghurba&gov=taiz` or `&city=105343` open that view.
+- Explore: click a governorate ("where are the people of Taiz?"), a district ("where are the people of Abs?") or a city ("where are Jeddah's Yemenis from?"). Links such as `?gov=taiz`, `?gov=hajjah&district=YE1704` or `?city=105343` open that view (older `?view=ghurba` links still land in the right place).
+- Search in Arabic or English across governorates, districts, cities and countries: "تعز", "Taiz" and "Ta'iz" all find the same place. Press `/` to focus it.
 - Messages appear only after review on `/admin.html`.
+- RTL Arabic interface with an English toggle (remembered per browser).
+- Phone layout with a bottom sheet.
 - Weak devices and reduced-motion settings get a still globe without the glow.
+
+The original Ghurba spec is in [`ghurba-map.md`](ghurba-map.md).
 
 Privacy:
 
@@ -85,7 +81,7 @@ The base map is two [Protomaps](https://protomaps.com) PMTiles files cut from Op
 
 | File | Area | Zooms | Size |
 | --- | --- | --- | --- |
-| `region.pmtiles` | Wide box around Yemen (the map's pan limit) | 0 to 6 | about 5 MB |
+| `region.pmtiles` | Wide box around Yemen | 0 to 6 | about 5 MB |
 | `yemen.pmtiles` | Yemen plus a margin | 0 to 13 | about 60 MB |
 
 The zoomed-out views use the region file and the Yemen file takes over from zoom 6. The browser fetches only the tiles on screen, through HTTP range requests, so visitors never download the whole file.
@@ -129,5 +125,5 @@ Open `/admin.html` and enter `ADMIN_TOKEN`. Pending messages can be published or
 
 ## Roadmap
 
-- Yemen map: 3D terrain, layer switcher (heritage sites, cities, ports and airports, roads), choropleth by population, area or density, shareable links such as `?gov=hadramawt`; later heritage photo cards and offline/PWA support.
+- On the globe: 3D terrain, layer switcher (heritage sites, cities, ports and airports, roads), choropleth by population, area or density; later heritage photo cards and offline/PWA support.
 - Ghurba map: lines for people displaced inside Yemen (a separate topic, deliberately left out).

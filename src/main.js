@@ -1,10 +1,9 @@
 // Only the Sans family; the browser fetches each weight from the CDN the first time it is used.
 import '@dawod/thmanyah-font-web/sans.css';
 import './style.css';
-import { createMap, YEMEN_BOUNDS } from './map.js';
-import { createIndex, search } from './search.js';
-import { strings, fmt } from './i18n.js';
-import { esc, stat, crumbs } from './ui.js';
+import { createMap } from './map.js';
+import { strings } from './i18n.js';
+import { esc } from './ui.js';
 import { createGhurba } from './ghurba.js';
 
 const $ = (id) => document.getElementById(id);
@@ -15,12 +14,12 @@ const els = {
   results: $('search-results'),
   body: $('panel-body'),
   foot: $('panel-foot'),
-  modes: $('modes'),
 };
 
-// mode: 'yemen' (governorates and districts) or 'ghurba' (the map of Yemenis abroad).
+// One view only: the Ghurba map of Yemenis abroad, with Yemen's governorates and districts
+// merged into it. Deep links pick a place: ?gov=<slug>, &district=<id> or &city=<GeoNames id>.
 const params = new URLSearchParams(location.search);
-const state = { lang: 'ar', mode: params.get('view') === 'ghurba' ? 'ghurba' : 'yemen', gov: null, district: null };
+const state = { lang: 'ar' };
 try {
   if (localStorage.getItem('lang') === 'en') state.lang = 'en';
 } catch {}
@@ -31,13 +30,10 @@ const lite =
   (navigator.deviceMemory ?? 8) <= 2 ||
   (navigator.hardwareConcurrency ?? 8) <= 2;
 
-let data, index, mapApi, ghurba;
+let data, mapApi, ghurba;
 const t = (key) => strings[state.lang][key];
-const name = (item) => item.name[state.lang];
-const other = (item) => item.name[state.lang === 'ar' ? 'en' : 'ar'];
-const byName = (a, b) => name(a).localeCompare(name(b), state.lang);
 
-// Keep the selected area clear of the side panel (desktop) or bottom sheet (phone).
+// Keep the globe clear of the side panel (desktop) or bottom sheet (phone).
 function cameraPadding() {
   const panel = document.getElementById('panel').getBoundingClientRect();
   const mobile = window.matchMedia('(max-width: 720px)').matches;
@@ -47,138 +43,24 @@ function cameraPadding() {
   return p;
 }
 
-// ---------- panel ----------
-
-function density(item) {
-  return item.population ? fmt(item.population / item.area, state.lang) : '—';
-}
-
-function listItem(type, item) {
-  return `<li><button type="button" data-${type}="${item.id}">
-    <span>${esc(name(item))}</span><small>${fmt(item.population, state.lang)}</small>
-  </button></li>`;
-}
-
-function renderOverview() {
-  const govs = Object.values(data.governorates).sort(byName);
-  const total = govs.reduce((s, g) => s + g.population, 0);
-  const area = govs.reduce((s, g) => s + g.area, 0);
-  return `
-    <h2>${t('yemen')}</h2>
-    <p class="hint">${t('hint')}</p>
-    <dl class="stats">
-      ${stat(t('population'), fmt(total, state.lang))}
-      ${stat(t('area'), fmt(area, state.lang), t('km2'))}
-      ${stat(t('governorates'), fmt(govs.length, state.lang))}
-      ${stat(t('districts'), fmt(Object.keys(data.districts).length, state.lang))}
-    </dl>
-    <h3>${t('governorates')}</h3>
-    <ul class="list">${govs.map((g) => listItem('gov', g)).join('')}</ul>`;
-}
-
-function renderGov(g) {
-  const districts = g.districts.map((id) => data.districts[id]).sort(byName);
-  return `
-    ${crumbs([[t('yemen'), 'data-home']])}
-    <p class="kind">${t('governorate')}</p>
-    <h2>${esc(name(g))}</h2>
-    <p class="alt" lang="${state.lang === 'ar' ? 'en' : 'ar'}">${esc(other(g))}</p>
-    <dl class="stats">
-      ${stat(t('capital'), esc(g.capital[state.lang]))}
-      ${stat(t('population'), fmt(g.population, state.lang))}
-      ${stat(t('area'), fmt(g.area, state.lang), t('km2'))}
-      ${stat(t('density'), density(g), t('perKm2'))}
-    </dl>
-    <h3>${t('districts')} <small>(${fmt(districts.length, state.lang)})</small></h3>
-    <ul class="list">${districts.map((d) => listItem('district', d)).join('')}</ul>`;
-}
-
-function renderDistrict(d) {
-  const g = data.governorates[d.gov];
-  return `
-    ${crumbs([
-      [t('yemen'), 'data-home'],
-      [name(g), `data-gov="${g.id}"`],
-    ])}
-    <p class="kind">${t('district')}</p>
-    <h2>${esc(name(d))}</h2>
-    <p class="alt" lang="${state.lang === 'ar' ? 'en' : 'ar'}">${esc(other(d))}</p>
-    <dl class="stats">
-      ${stat(t('governorate'), `<button type="button" class="link" data-gov="${g.id}">${esc(name(g))}</button>`)}
-      ${stat(t('population'), d.population == null ? t('noData') : fmt(d.population, state.lang))}
-      ${stat(t('area'), fmt(d.area, state.lang), t('km2'))}
-      ${stat(t('density'), density(d), d.population ? t('perKm2') : '')}
-      ${d.idps ? stat(t('idps'), fmt(d.idps, state.lang)) : ''}
-    </dl>`;
-}
-
-function render() {
-  if (state.mode === 'ghurba') return ghurba.render();
-  const d = state.district && data.districts[state.district];
-  const g = state.gov && data.governorates[state.gov];
-  els.body.innerHTML = d ? renderDistrict(d) : g ? renderGov(g) : renderOverview();
-  els.body.scrollTop = 0;
-}
-
 function renderChrome() {
-  const { lang, mode } = state;
-  const ghurbaMode = mode === 'ghurba';
+  const { lang } = state;
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-  document.title = ghurbaMode ? `${t('ghurbaTitle')} · ${t('title')}` : t('title');
+  document.title = `${t('ghurbaTitle')} · ${t('title')}`;
   els.title.textContent = t('title');
   els.toggle.textContent = t('toggle');
   els.toggle.lang = lang === 'ar' ? 'en' : 'ar';
-  els.modes.setAttribute('aria-label', t('modes'));
-  for (const b of els.modes.querySelectorAll('button')) {
-    b.textContent = t(b.dataset.mode === 'ghurba' ? 'modeGhurba' : 'modeYemen');
-    b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
-  }
-  const placeholder = t(ghurbaMode ? 'ghurbaSearch' : 'search');
+  const placeholder = t('ghurbaSearch');
   els.input.placeholder = placeholder;
   els.input.setAttribute('aria-label', placeholder);
-  els.foot.textContent = t(ghurbaMode ? 'ghurbaSources' : 'sources');
+  els.foot.textContent = `${t('ghurbaSources')} ${t('sources')}`;
 }
 
-// The address bar follows the view, so it can be shared: ?view=ghurba&gov=taiz.
+// The address bar follows the view, so it can be shared: ?gov=taiz&district=YE1704&city=105343.
 function syncUrl() {
-  const query = state.mode === 'ghurba' ? `?${ghurba.params()}` : '';
-  history.replaceState(null, '', `${location.pathname}${query}`);
-}
-
-async function setMode(mode, initial) {
-  if (mode === state.mode && initial === undefined) return;
-  if (state.mode === 'ghurba') ghurba.leave();
-  state.mode = mode;
-  els.input.value = '';
-  updateResults();
-  renderChrome();
-  if (mode === 'ghurba') {
-    state.gov = state.district = null;
-    mapApi.select(null, null);
-    const entering = ghurba.enter(initial); // sets its view before loading anything
-    syncUrl();
-    await entering;
-  } else {
-    go(null);
-    syncUrl();
-  }
-}
-
-// ---------- navigation ----------
-
-function frame() {
-  if (state.mode === 'ghurba') return;
-  const target = state.district ? data.districts[state.district] : state.gov ? data.governorates[state.gov] : null;
-  mapApi.fit(target ? target.bbox : YEMEN_BOUNDS, cameraPadding());
-}
-
-function go(govId, districtId = null) {
-  state.gov = govId;
-  state.district = districtId;
-  mapApi.select(govId, districtId);
-  frame();
-  render();
+  const query = ghurba.params().toString();
+  history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}`);
 }
 
 function setLang(lang) {
@@ -187,10 +69,8 @@ function setLang(lang) {
     localStorage.setItem('lang', lang);
   } catch {}
   renderChrome();
-  if (state.mode === 'ghurba') ghurba.setLang();
-  else render();
+  ghurba.setLang(); // the globe gets new labels and padding: the panel switched sides
   mapApi.setLang(lang);
-  frame(); // the panel switched sides
   updateResults();
 }
 
@@ -199,15 +79,8 @@ function setLang(lang) {
 let hits = [];
 let active = -1;
 
-function hitLabel(h) {
-  if (state.mode === 'ghurba') return ghurba.hitLabel(h);
-  const item = h.type === 'gov' ? data.governorates[h.id] : data.districts[h.id];
-  const sub = h.type === 'gov' ? t('governorate') : `${t('district')} · ${name(data.governorates[item.gov])}`;
-  return { name: name(item), sub };
-}
-
 function updateResults() {
-  hits = state.mode === 'ghurba' ? ghurba.search(els.input.value) : search(index, els.input.value);
+  hits = ghurba.search(els.input.value);
   active = hits.length ? 0 : -1;
   if (!els.input.value.trim()) {
     els.results.hidden = true;
@@ -217,7 +90,7 @@ function updateResults() {
   els.results.innerHTML = hits.length
     ? hits
         .map((h, i) => {
-          const label = hitLabel(h);
+          const label = ghurba.hitLabel(h);
           return `<li role="option" id="hit-${i}" data-i="${i}" aria-selected="${i === active}">
             <span>${esc(label.name)}</span><small>${esc(label.sub)}</small></li>`;
         })
@@ -239,9 +112,7 @@ function highlight() {
 function choose(i) {
   const h = hits[i];
   if (!h) return;
-  if (state.mode === 'ghurba') ghurba.choose(h);
-  else if (h.type === 'gov') go(h.id);
-  else go(data.districts[h.id].gov, h.id);
+  ghurba.choose(h);
   els.input.value = '';
   updateResults();
   els.input.blur();
@@ -253,41 +124,27 @@ async function init() {
   renderChrome();
   const res = await fetch(`${import.meta.env.BASE_URL}data/yemen.json`);
   data = await res.json();
-  index = createIndex(data);
   mapApi = await createMap('map', state.lang, cameraPadding(), { lite });
   ghurba = createGhurba({ state, data, mapApi, body: els.body, padding: cameraPadding, onChange: syncUrl });
-  if (state.mode === 'ghurba') {
-    const initial = {
-      gov: Object.values(data.governorates).find((g) => g.slug === params.get('gov'))?.id,
-      city: params.get('city'),
-    };
-    state.mode = 'yemen'; // the map starts on Yemen; setMode moves it to the globe
-    setMode('ghurba', initial).catch((err) => console.error(err));
-  } else render();
-  mapApi.map.on('click', (e) => {
-    const hit = mapApi.pick(e.point);
-    if (state.mode === 'ghurba') return ghurba.click(hit, e.lngLat);
-    if (!hit) return go(null);
-    if (hit.type === 'district') go(state.gov, hit.id);
-    else go(hit.id);
+  const district = params.get('district');
+  const entering = ghurba.enter({
+    gov: Object.values(data.governorates).find((g) => g.slug === params.get('gov'))?.id,
+    district: district && data.districts[district] ? district : null,
+    city: params.get('city'),
   });
+  syncUrl(); // the URL now matches the view, and legacy params like ?view=ghurba drop away
+  entering.catch((err) => console.error(err));
+
+  mapApi.map.on('click', (e) => ghurba.click(mapApi.pick(e.point), e.lngLat));
 
   els.toggle.addEventListener('click', () => setLang(state.lang === 'ar' ? 'en' : 'ar'));
-  els.modes.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-mode]');
-    if (b) setMode(b.dataset.mode).catch((err) => console.error(err));
-  });
 
   document.getElementById('panel').addEventListener('click', (e) => {
     const b = e.target.closest('button');
-    if (!b) return;
-    if (state.mode === 'ghurba') return ghurba.panelClick(b);
-    if ('home' in b.dataset) go(null);
-    else if (b.dataset.gov) go(b.dataset.gov);
-    else if (b.dataset.district) go(data.districts[b.dataset.district].gov, b.dataset.district);
+    if (b) ghurba.panelClick(b);
   });
 
-  // Hovering a list row highlights that area on the map.
+  // Hovering a list row highlights that place on the map.
   els.body.addEventListener('mouseover', (e) => {
     const b = e.target.closest('button[data-gov], button[data-district], button[data-city]');
     const type = b && ['gov', 'district', 'city'].find((k) => b.dataset[k]);
@@ -326,10 +183,7 @@ async function init() {
     if (e.key === '/') {
       e.preventDefault();
       els.input.focus();
-    } else if (e.key === 'Escape') {
-      if (state.mode === 'ghurba') ghurba.back();
-      else if (state.gov) state.district ? go(state.gov) : go(null);
-    }
+    } else if (e.key === 'Escape') ghurba.back();
   });
 }
 
