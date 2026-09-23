@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>إدارة خريطة الغربة</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>إدارة خريطة الغربة</h1>
+        <button id="logout" type="button" hidden>خروج</button>
+      </header>
+
+      <form id="login">
+        <label for="token">رمز الإدارة</label>
+        <input id="token" type="password" autocomplete="current-password" required />
+        <button type="submit">دخول</button>
+        <p class="error" role="alert" hidden></p>
+      </form>
+
+      <section id="admin" hidden>
+        <p class="note">
+          وافق فقط على الرسائل التي لا تكشف أحدًا: ارفض أي رسالة فيها اسم أو رقم هاتف أو مكان أدق من مدينة. الرسالة
+          المرفوضة تُحذف، والخط يبقى.
+        </p>
+        <nav class="tabs" role="tablist">
+          <button type="button" role="tab" data-view="pending">رسائل للمراجعة</button>
+          <button type="button" role="tab" data-view="all">كل الخطوط</button>
+          <button type="button" role="tab" data-view="hidden">المخفية</button>
+        </nav>
+        <ul id="rows"></ul>
+        <p id="empty" class="muted" hidden>لا شيء هنا.</p>
+        <button id="more" type="button" hidden>المزيد</button>
+      </section>
+    </main>
+    <script type="module" src="/src/admin.js"></script>
+  </body>
+</html>

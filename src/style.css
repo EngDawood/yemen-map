@@ -17,6 +17,11 @@
   box-sizing: border-box;
 }
 
+/* Keep the hidden attribute working on elements that set their own display. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -98,7 +103,8 @@ button {
   background: var(--surface);
 }
 
-#search-results {
+#search-results,
+#city-results {
   position: absolute;
   inset-inline: 0;
   top: calc(100% + 4px);
@@ -114,7 +120,8 @@ button {
   z-index: 3;
 }
 
-#search-results li {
+#search-results li,
+#city-results li {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -124,11 +131,13 @@ button {
   cursor: pointer;
 }
 
-#search-results li[aria-selected='true'] {
+#search-results li[aria-selected='true'],
+#city-results li[aria-selected='true'] {
   background: var(--hover);
 }
 
 #search-results small,
+#city-results small,
 .list small,
 .hint,
 .alt,
@@ -137,7 +146,8 @@ h3 small {
   color: var(--muted);
 }
 
-#search-results .empty {
+#search-results .empty,
+#city-results .empty {
   cursor: default;
   color: var(--muted);
 }
@@ -263,6 +273,297 @@ h3 small {
   outline-offset: 2px;
 }
 
+/* ---------- mode switch ---------- */
+
+.modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.modes button {
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: none;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.modes button[aria-pressed='true'] {
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(60 45 20 / 0.2);
+  font-weight: 700;
+}
+
+/* ---------- Ghurba map ---------- */
+
+/* Space around the globe. */
+#map.globe {
+  background: radial-gradient(circle at 50% 45%, #10223d 0%, #050b16 70%);
+}
+
+.primary {
+  display: block;
+  width: 100%;
+  margin: 14px 0 4px;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary:hover {
+  background: #97201a;
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.secondary,
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: inherit;
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.secondary:hover,
+.btn:hover {
+  background: var(--hover);
+}
+
+.counter {
+  margin: 14px 0 0;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.counter b,
+.moment b {
+  color: var(--accent);
+}
+
+.notice {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fbeae8;
+  color: #7d1a14;
+}
+
+.mine-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.mine-row p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.messages {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.messages li {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.messages q {
+  display: block;
+}
+
+.messages small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+:lang(ar) q {
+  quotes: '«' '»';
+}
+
+.moment {
+  margin: 6px 0 12px;
+  font-size: 1.35rem;
+  line-height: 1.6;
+}
+
+.card-preview {
+  margin: 0;
+}
+
+.card-preview img {
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+}
+
+.share {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.share .btn {
+  flex: 1;
+}
+
+/* ---------- "draw your line" dialog ---------- */
+
+#add-dialog {
+  width: min(460px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.35);
+}
+
+#add-dialog::backdrop {
+  background: rgb(5 11 22 / 0.55);
+}
+
+.add-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.add-form header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.add-form h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.add-form .close {
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.add-form .privacy {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.add-form fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.add-form legend,
+.add-form label {
+  display: block;
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.add-form .row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.add-form select,
+.add-form input,
+.add-form textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.add-form select:focus,
+.add-form input:focus,
+.add-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.add-form textarea {
+  resize: vertical;
+}
+
+.add-form small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.combo {
+  position: relative;
+}
+
+.form-error {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.add-form .primary {
+  margin: 0;
+}
+
 /* Attribution text is Latin; keep it readable in RTL. */
 .maplibregl-ctrl-attrib {
   direction: ltr;
@@ -298,5 +599,18 @@ h3 small {
   #map .maplibregl-ctrl-bottom-right,
   #map .maplibregl-ctrl-bottom-left {
     bottom: 48vh;
+  }
+
+  .modes {
+    margin-bottom: 8px;
+  }
+
+  /* The dialog becomes a bottom sheet too. */
+  #add-dialog {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 92dvh;
+    margin: auto 0 0;
+    border-radius: var(--radius) var(--radius) 0 0;
   }
 }

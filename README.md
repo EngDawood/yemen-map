@@ -1,8 +1,8 @@
 # خريطة اليمن · Yemen Map
 
-An Arabic-first interactive explorer of Yemen's 22 governorates and 335 districts, built with MapLibre GL JS and Vite. Fully static: no server, no database.
+An Arabic-first interactive explorer of Yemen's 22 governorates and 335 districts, built with MapLibre GL JS and Vite, plus the Ghurba map (خريطة الغربة) of Yemenis abroad. It runs on Cloudflare Workers: the site is static files, and a small Worker with a D1 database serves the Ghurba map.
 
-## Features (version 1)
+## Features
 
 - Map of the 22 governorates. Hover highlights one, click zooms to it and opens the side panel.
 - Side panel with Arabic and English names, capital, population, area, density and the district list.
@@ -11,14 +11,35 @@ An Arabic-first interactive explorer of Yemen's 22 governorates and 335 district
 - RTL Arabic interface with an English toggle (remembered per browser).
 - Phone layout with a bottom sheet.
 
+### Ghurba map
+
+The "الغربة" switch (or `?view=ghurba`) turns the map into a slowly spinning globe. Each Yemeni abroad draws one line, from their district to the city they live in. The spec is in [`ghurba-map.md`](ghurba-map.md).
+
+- Counter: "12,430 Yemenis in 87 countries and 540 cities", with correct Arabic number agreement.
+- Draw your line: governorate and district, then a city search (about 900 cities, Arabic or English, also by country name) and an optional message. A Turnstile check runs out of sight; its box appears only if Cloudflare needs the visitor to click.
+- The moment: the camera flies to the new line and draws it, with "أنت واحد من 214 من حجة في الرياض".
+- Share card: a square image drawn in the browser, with WhatsApp, story (Web Share, on phones) and download buttons.
+- Explore: click a governorate ("where are the people of Taiz?") or a city ("where are Jeddah's Yemenis from?"). Links such as `?view=ghurba&gov=taiz` or `&city=105343` open that view.
+- Messages appear only after review on `/admin.html`.
+- Weak devices and reduced-motion settings get a still globe without the glow.
+
+Privacy:
+
+- No names, emails, accounts or browser geolocation. Only the district and the city are stored, and the city is its center point.
+- The browser only receives counts per district and city. Numbers under 3 are not shown (the line still is).
+- The IP address is never stored. A keyed hash of IP and browser allows one line per device per day; a daily cron clears it after 30 days. Worker request logs are off.
+- Approved messages show the governorate, not the district. A rejected message is deleted.
+
 ## Run locally
 
 ```sh
 npm install
+cp .dev.vars.example .dev.vars   # local secrets; Turnstile uses Cloudflare's always-pass test keys
+npm run db:migrate:local         # creates the local D1 database in .wrangler/
 npm run dev
 ```
 
-`npm run build` writes the static site to `dist/`.
+`npm run dev` runs the site and the Worker (`worker/index.js`) together through the Cloudflare Vite plugin, with a local D1 database. `npm run build` writes the site to `dist/client` and the Worker to `dist/yemen_map`.
 
 ## Data
 
@@ -29,6 +50,8 @@ Everything the app reads lives in `public/data/` and is committed, so a normal b
 | `yemen.json` | All governorate and district attributes: names, capital, population, area, bounds |
 | `governorates.geojson`, `districts.geojson` | Simplified boundaries (about 120 KB and 330 KB, down from 2.8 MB and 5.9 MB) |
 | `*-labels.geojson` | Label points |
+| `cities.json` | Ghurba destination cities: Arabic and English names, country, center, search aliases |
+| `land.geojson` | World land for the globe and the share card (about 240 KB) |
 
 To rebuild it from the sources:
 
@@ -44,6 +67,17 @@ Sources:
 - Population: [Yemen Population Taskforce 2025 estimates](https://data.humdata.org/dataset/yemen-population-estimates) (CSO, UNFPA, IOM, OCHA), CC BY. Governorate totals are the sum of their districts. Two "Sana'a City Outskirts" districts have no figure in the source and show "No data".
 
 District Arabic names come from the source as published, so some use ه in place of ة.
+
+The Ghurba files have their own script:
+
+```sh
+npm run data:ghurba
+```
+
+It downloads about 210 MB into `data-raw/` and picks about 900 cities: every capital, every Saudi city in the list, lower population cut-offs where most Yemenis abroad live (Gulf, Arab world, Horn of Africa, Malaysia, Turkey, UK, US), and known communities such as Dearborn, Hamtramck, Lackawanna and South Shields. Neighborhoods and boroughs are merged into their city as search aliases ("Brooklyn" finds New York). Yemen is left out (displacement inside Yemen is a separate topic), and so is Israel. Arabic names GeoNames lacks or gets wrong are fixed in `NAME_FIX`. All of this is at the top of `scripts/build-ghurba-data.mjs`.
+
+- Cities: [GeoNames](https://www.geonames.org) `cities15000` and alternate names, CC BY 4.0.
+- Land: [Natural Earth](https://www.naturalearthdata.com) 1:50m land, public domain.
 
 ## Base map
 
@@ -70,12 +104,30 @@ The interface uses Thmanyah Sans from [`@dawod/thmanyah-font-web`](https://www.n
 
 ## Deploy
 
-Any static host works. Build command `npm run build`, output directory `dist`.
+The site runs as the `yemen-map` Worker on Cloudflare (Workers with static assets; Vercel cannot host the D1 database). Workers Builds deploys every push to `main`: build command `npm run build`, deploy command `npx wrangler deploy`. `wrangler.jsonc` holds the configuration.
 
-- **Vercel**: import the repo; the Vite preset is detected automatically.
-- **Cloudflare Pages**: framework preset "Vite", same command and output.
+| Piece | Where |
+| --- | --- |
+| Site | `https://yemen-map.dawod.workers.dev` |
+| Database | D1 `ghurba`, schema in `migrations/` |
+| Turnstile | Widget "Ghurba Map (yemen-map)"; its site key is in `.env` |
+| Secrets | `TURNSTILE_SECRET`, `HASH_SALT`, `ADMIN_TOKEN` |
+
+`TURNSTILE_SECRET` and `HASH_SALT` are already set on the Worker. Set the admin password yourself, since nobody else should know it:
+
+```sh
+npx wrangler secret put ADMIN_TOKEN
+```
+
+After adding a migration, apply it with `npm run db:migrate` (Workers Builds does not run migrations). A custom domain must also be added to the Turnstile widget's hostnames.
+
+Costs: D1's free plan allows 5 million rows read a day. The public counts are cached for a minute, but each refresh reads every line, so move to the Workers Paid plan ($5 a month) before the public launch.
+
+### Moderation
+
+Open `/admin.html` and enter `ADMIN_TOKEN`. Pending messages can be published or rejected, and any line can be hidden or shown again.
 
 ## Roadmap
 
-- Version 2: 3D terrain, layer switcher (heritage sites, cities, ports and airports, roads), choropleth by population, area or density, shareable links such as `?gov=hadramawt`.
-- Version 3: heritage photo cards, offline/PWA support.
+- Yemen map: 3D terrain, layer switcher (heritage sites, cities, ports and airports, roads), choropleth by population, area or density, shareable links such as `?gov=hadramawt`; later heritage photo cards and offline/PWA support.
+- Ghurba map: lines for people displaced inside Yemen (a separate topic, deliberately left out).

@@ -36,12 +36,28 @@ function score(key, q) {
   return Infinity;
 }
 
+// Ghurba map: governorates and destination cities. A city is also found by its country's name
+// ("ماليزيا", "Malaysia"), ranked after direct name matches; cities are already sorted by size.
+export function createGhurbaIndex(data, cities, countryNames) {
+  const entries = [];
+  for (const g of Object.values(data.governorates)) {
+    const keys = [g.name.ar, g.name.en, g.slug, ...g.aliases];
+    entries.push({ type: 'gov', id: g.id, keys: [...new Set(keys.map(normalize))] });
+  }
+  for (const c of cities) {
+    const keys = [c.name.ar, c.name.en, ...(c.aliases ?? [])];
+    const extra = [...new Set(countryNames(c.country).map(normalize))];
+    entries.push({ type: 'city', id: c.id, keys: [...new Set(keys.map(normalize))], extra });
+  }
+  return entries;
+}
+
 export function search(index, query, limit = 8) {
   const q = normalize(query);
   if (!q) return [];
   const hits = [];
   for (const e of index) {
-    const s = Math.min(...e.keys.map((k) => score(k, q)));
+    const s = Math.min(...e.keys.map((k) => score(k, q)), ...(e.extra ?? []).map((k) => score(k, q) + 2));
     if (s < Infinity) hits.push({ ...e, score: s + (e.type === 'gov' ? 0 : 0.5) });
   }
   return hits.sort((a, b) => a.score - b.score).slice(0, limit);

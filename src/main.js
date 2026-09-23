@@ -4,6 +4,9 @@ import './style.css';
 import { createMap, YEMEN_BOUNDS } from './map.js';
 import { createIndex, search } from './search.js';
 import { strings, fmt } from './i18n.js';
+import { esc, stat, crumbs } from './ui.js';
+import { createGhurba } from './ghurba.js';
+import { addLineOpen } from './add-line.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -13,19 +16,27 @@ const els = {
   results: $('search-results'),
   body: $('panel-body'),
   foot: $('panel-foot'),
+  modes: $('modes'),
 };
 
-const state = { lang: 'ar', gov: null, district: null };
+// mode: 'yemen' (governorates and districts) or 'ghurba' (the map of Yemenis abroad).
+const params = new URLSearchParams(location.search);
+const state = { lang: 'ar', mode: params.get('view') === 'ghurba' ? 'ghurba' : 'yemen', gov: null, district: null };
 try {
   if (localStorage.getItem('lang') === 'en') state.lang = 'en';
 } catch {}
 
-let data, index, mapApi;
+// Weak devices and reduced-motion settings get a still globe without the glow.
+const lite =
+  matchMedia('(prefers-reduced-motion: reduce)').matches ||
+  (navigator.deviceMemory ?? 8) <= 2 ||
+  (navigator.hardwareConcurrency ?? 8) <= 2;
+
+let data, index, mapApi, ghurba;
 const t = (key) => strings[state.lang][key];
 const name = (item) => item.name[state.lang];
 const other = (item) => item.name[state.lang === 'ar' ? 'en' : 'ar'];
 const byName = (a, b) => name(a).localeCompare(name(b), state.lang);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 // Keep the selected area clear of the side panel (desktop) or bottom sheet (phone).
 function cameraPadding() {
@@ -39,10 +50,6 @@ function cameraPadding() {
 
 // ---------- panel ----------
 
-function stat(label, value, unit = '') {
-  return `<div class="stat"><dt>${label}</dt><dd>${value}${unit ? ` <small>${unit}</small>` : ''}</dd></div>`;
-}
-
 function density(item) {
   return item.population ? fmt(item.population / item.area, state.lang) : '—';
 }
@@ -51,12 +58,6 @@ function listItem(type, item) {
   return `<li><button type="button" data-${type}="${item.id}">
     <span>${esc(name(item))}</span><small>${fmt(item.population, state.lang)}</small>
   </button></li>`;
-}
-
-function crumbs(parts) {
-  return `<nav class="crumbs">${parts
-    .map(([label, attr]) => (attr ? `<button type="button" ${attr}>${esc(label)}</button>` : `<span>${esc(label)}</span>`))
-    .join('<span class="sep" aria-hidden="true">›</span>')}</nav>`;
 }
 
 function renderOverview() {
@@ -113,6 +114,7 @@ function renderDistrict(d) {
 }
 
 function render() {
+  if (state.mode === 'ghurba') return ghurba.render();
   const d = state.district && data.districts[state.district];
   const g = state.gov && data.governorates[state.gov];
   els.body.innerHTML = d ? renderDistrict(d) : g ? renderGov(g) : renderOverview();
@@ -120,21 +122,54 @@ function render() {
 }
 
 function renderChrome() {
-  const { lang } = state;
+  const { lang, mode } = state;
+  const ghurbaMode = mode === 'ghurba';
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-  document.title = t('title');
+  document.title = ghurbaMode ? `${t('ghurbaTitle')} · ${t('title')}` : t('title');
   els.title.textContent = t('title');
   els.toggle.textContent = t('toggle');
   els.toggle.lang = lang === 'ar' ? 'en' : 'ar';
-  els.input.placeholder = t('search');
-  els.input.setAttribute('aria-label', t('search'));
-  els.foot.textContent = t('sources');
+  els.modes.setAttribute('aria-label', t('modes'));
+  for (const b of els.modes.querySelectorAll('button')) {
+    b.textContent = t(b.dataset.mode === 'ghurba' ? 'modeGhurba' : 'modeYemen');
+    b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  }
+  const placeholder = t(ghurbaMode ? 'ghurbaSearch' : 'search');
+  els.input.placeholder = placeholder;
+  els.input.setAttribute('aria-label', placeholder);
+  els.foot.textContent = t(ghurbaMode ? 'ghurbaSources' : 'sources');
+}
+
+// The address bar follows the view, so it can be shared: ?view=ghurba&gov=taiz.
+function syncUrl() {
+  const query = state.mode === 'ghurba' ? `?${ghurba.params()}` : '';
+  history.replaceState(null, '', `${location.pathname}${query}`);
+}
+
+async function setMode(mode, initial) {
+  if (mode === state.mode && initial === undefined) return;
+  if (state.mode === 'ghurba') ghurba.leave();
+  state.mode = mode;
+  els.input.value = '';
+  updateResults();
+  renderChrome();
+  if (mode === 'ghurba') {
+    state.gov = state.district = null;
+    mapApi.select(null, null);
+    const entering = ghurba.enter(initial); // sets its view before loading anything
+    syncUrl();
+    await entering;
+  } else {
+    go(null);
+    syncUrl();
+  }
 }
 
 // ---------- navigation ----------
 
 function frame() {
+  if (state.mode === 'ghurba') return;
   const target = state.district ? data.districts[state.district] : state.gov ? data.governorates[state.gov] : null;
   mapApi.fit(target ? target.bbox : YEMEN_BOUNDS, cameraPadding());
 }
@@ -153,7 +188,8 @@ function setLang(lang) {
     localStorage.setItem('lang', lang);
   } catch {}
   renderChrome();
-  render();
+  if (state.mode === 'ghurba') ghurba.setLang();
+  else render();
   mapApi.setLang(lang);
   frame(); // the panel switched sides
   updateResults();
@@ -164,8 +200,15 @@ function setLang(lang) {
 let hits = [];
 let active = -1;
 
+function hitLabel(h) {
+  if (state.mode === 'ghurba') return ghurba.hitLabel(h);
+  const item = h.type === 'gov' ? data.governorates[h.id] : data.districts[h.id];
+  const sub = h.type === 'gov' ? t('governorate') : `${t('district')} · ${name(data.governorates[item.gov])}`;
+  return { name: name(item), sub };
+}
+
 function updateResults() {
-  hits = search(index, els.input.value);
+  hits = state.mode === 'ghurba' ? ghurba.search(els.input.value) : search(index, els.input.value);
   active = hits.length ? 0 : -1;
   if (!els.input.value.trim()) {
     els.results.hidden = true;
@@ -175,11 +218,9 @@ function updateResults() {
   els.results.innerHTML = hits.length
     ? hits
         .map((h, i) => {
-          const item = h.type === 'gov' ? data.governorates[h.id] : data.districts[h.id];
-          const sub =
-            h.type === 'gov' ? t('governorate') : `${t('district')} · ${name(data.governorates[item.gov])}`;
+          const label = hitLabel(h);
           return `<li role="option" id="hit-${i}" data-i="${i}" aria-selected="${i === active}">
-            <span>${esc(name(item))}</span><small>${esc(sub)}</small></li>`;
+            <span>${esc(label.name)}</span><small>${esc(label.sub)}</small></li>`;
         })
         .join('')
     : `<li class="empty">${t('noResults')}</li>`;
@@ -199,7 +240,8 @@ function highlight() {
 function choose(i) {
   const h = hits[i];
   if (!h) return;
-  if (h.type === 'gov') go(h.id);
+  if (state.mode === 'ghurba') ghurba.choose(h);
+  else if (h.type === 'gov') go(h.id);
   else go(data.districts[h.id].gov, h.id);
   els.input.value = '';
   updateResults();
@@ -213,20 +255,34 @@ async function init() {
   const res = await fetch(`${import.meta.env.BASE_URL}data/yemen.json`);
   data = await res.json();
   index = createIndex(data);
-  mapApi = await createMap('map', state.lang, cameraPadding());
-  render();
+  mapApi = await createMap('map', state.lang, cameraPadding(), { lite });
+  ghurba = createGhurba({ state, data, mapApi, body: els.body, padding: cameraPadding, onChange: syncUrl });
+  if (state.mode === 'ghurba') {
+    const initial = {
+      gov: Object.values(data.governorates).find((g) => g.slug === params.get('gov'))?.id,
+      city: params.get('city'),
+    };
+    state.mode = 'yemen'; // the map starts on Yemen; setMode moves it to the globe
+    setMode('ghurba', initial).catch((err) => console.error(err));
+  } else render();
   mapApi.map.on('click', (e) => {
     const hit = mapApi.pick(e.point);
+    if (state.mode === 'ghurba') return ghurba.click(hit);
     if (!hit) return go(null);
     if (hit.type === 'district') go(state.gov, hit.id);
     else go(hit.id);
   });
 
   els.toggle.addEventListener('click', () => setLang(state.lang === 'ar' ? 'en' : 'ar'));
+  els.modes.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mode]');
+    if (b) setMode(b.dataset.mode).catch((err) => console.error(err));
+  });
 
   document.getElementById('panel').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
+    if (state.mode === 'ghurba') return ghurba.panelClick(b);
     if ('home' in b.dataset) go(null);
     else if (b.dataset.gov) go(b.dataset.gov);
     else if (b.dataset.district) go(data.districts[b.dataset.district].gov, b.dataset.district);
@@ -234,8 +290,9 @@ async function init() {
 
   // Hovering a list row highlights that area on the map.
   els.body.addEventListener('mouseover', (e) => {
-    const b = e.target.closest('button[data-gov], button[data-district]');
-    mapApi.hover(b && (b.dataset.gov ? { type: 'gov', id: b.dataset.gov } : { type: 'district', id: b.dataset.district }));
+    const b = e.target.closest('button[data-gov], button[data-district], button[data-city]');
+    const type = b && ['gov', 'district', 'city'].find((k) => b.dataset[k]);
+    mapApi.hover(b && { type, id: b.dataset[type] });
   });
   els.body.addEventListener('mouseleave', () => mapApi.hover(null));
 
@@ -265,11 +322,14 @@ async function init() {
   els.input.addEventListener('focus', () => els.input.value && updateResults());
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === '/' && document.activeElement !== els.input) {
+    const typing = e.target.closest?.('input, textarea, select, [contenteditable]');
+    if (addLineOpen() || typing) return;
+    if (e.key === '/') {
       e.preventDefault();
       els.input.focus();
-    } else if (e.key === 'Escape' && document.activeElement !== els.input && state.gov) {
-      state.district ? go(state.gov) : go(null);
+    } else if (e.key === 'Escape') {
+      if (state.mode === 'ghurba') ghurba.back();
+      else if (state.gov) state.district ? go(state.gov) : go(null);
     }
   });
 }

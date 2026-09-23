@@ -1,0 +1,5 @@
+# Local secrets for `npm run dev`. Copy to .dev.vars (git-ignored).
+# Cloudflare's test secret: every Turnstile check passes.
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+HASH_SALT=local-development-salt
+ADMIN_TOKEN=local-admin-token

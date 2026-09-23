@@ -20,6 +20,76 @@ export const strings = {
     back: 'رجوع',
     hint: 'اختر محافظة من الخريطة أو القائمة.',
     sources: 'المصادر: الحدود الإدارية من OCHA COD-AB، وتقديرات السكان 2025 من فريق عمل السكان في اليمن، عبر HDX.',
+
+    // Ghurba map
+    modes: 'العرض',
+    modeYemen: 'اليمن',
+    modeGhurba: 'الغربة',
+    ghurbaTitle: 'خريطة الغربة',
+    ghurbaSearch: 'ابحث عن محافظة أو مدينة أو دولة',
+    ghurbaIntro: 'كل خط هنا يمني في الخارج، من مديريته في اليمن إلى المدينة التي يعيش فيها.',
+    ghurbaSources:
+      'لا نحفظ أسماء ولا مواقع: المديرية والمدينة فقط. المدن من GeoNames، واليابسة من Natural Earth، والحدود من OCHA COD-AB.',
+    loading: 'جارٍ التحميل…',
+    loadError: 'تعذّر تحميل الخطوط الآن. حاول لاحقًا.',
+    empty: 'لا خطوط بعد. كن أول من يرسم خطه.',
+    addLine: 'ارسم خطك',
+    myLine: 'خطك: من {from} إلى {to}',
+    myCard: 'بطاقتي',
+    topCities: 'أكثر المدن',
+    topGovs: 'من أين جاؤوا',
+    messages: 'من رسائل الغربة',
+    messageFrom: 'من {gov} في {city}',
+    whereGov: 'أين أهل {gov} في العالم؟',
+    whereCity: 'من أين يمنيّو {city}؟',
+    people: 'الأشخاص',
+    under3: 'أقل من ٣',
+    countries: 'الدول',
+    cities: 'المدن',
+    noLinesGov: 'لا خطوط من {gov} بعد.',
+    noLinesCity: 'لا خطوط إلى {city} بعد.',
+    city: 'مدينة',
+    country: 'دولة',
+    // "{people} في {countries} و{cities}", with Arabic number agreement.
+    counter: '{people} في {countries} و{cities}',
+    nPeople: { zero: 'لا أحد', one: 'يمني واحد', two: 'يمنيّان', few: '{n} يمنيين', many: '{n} يمنيًا', other: '{n} يمني' },
+    nCountries: { zero: '{n} دولة', one: 'دولة واحدة', two: 'دولتين', few: '{n} دول', many: '{n} دولة', other: '{n} دولة' },
+    nCities: { zero: '{n} مدينة', one: 'مدينة واحدة', two: 'مدينتين', few: '{n} مدن', many: '{n} مدينة', other: '{n} مدينة' },
+    oneOf: 'أنت واحد من {n} من {gov} في {city}',
+    firstOf: 'أنت أول من يرسم خطًا من {gov} إلى {city}',
+
+    // Add-your-line form
+    formTitle: 'ارسم خطك',
+    formPrivacy: 'لا نطلب اسمك ولا بريدك ولا موقعك. نحفظ مديريتك والمدينة التي تعيش فيها فقط.',
+    fromLabel: 'من أين أنت؟',
+    pickGov: 'المحافظة',
+    pickDistrict: 'المديرية',
+    toLabel: 'أين تعيش الآن؟',
+    cityPlaceholder: 'ابحث عن مدينتك بالعربية أو الإنجليزية',
+    cityHelp: 'إن لم تجد مدينتك فاختر أقرب مدينة كبيرة.',
+    messageLabel: 'رسالة قصيرة (اختياري)',
+    messagePlaceholder: 'اشتقت لمطر إب',
+    messageHelp: 'تظهر بعد مراجعتها. لا تكتب اسمًا أو رقم هاتف.',
+    submit: 'ارسم خطي',
+    sending: 'جارٍ الإرسال…',
+    close: 'إغلاق',
+    errPick: 'اختر المديرية والمدينة.',
+    errCheck: 'لم يكتمل التحقق. إن ظهر مربع التحقق فأكمله، ثم أعد المحاولة.',
+    errLimit: 'أُضيف خط من هذا الجهاز اليوم. عد غدًا.',
+    errTurnstile: 'تعذّر التحقق. حاول مرة أخرى.',
+    errMessage: 'الرسالة أطول من 80 حرفًا أو فيها رابط.',
+    errInvalid: 'تحقق من المديرية والمدينة.',
+    errSetup: 'الخدمة غير جاهزة بعد. حاول لاحقًا.',
+    errNetwork: 'تعذّر الاتصال. حاول مرة أخرى.',
+
+    // Share card
+    cardBrand: 'خريطة الغربة',
+    cardCall: 'ارسم خطك',
+    shareWhatsapp: 'واتساب',
+    shareStory: 'ستوري',
+    shareDownload: 'تحميل',
+    shareText: 'ارسم خطك على خريطة الغربة:',
+    cardAlt: 'بطاقة تُظهر خطك من اليمن إلى مدينتك',
   },
   en: {
     title: 'Yemen Map',
@@ -42,6 +112,72 @@ export const strings = {
     back: 'Back',
     hint: 'Pick a governorate on the map or from the list.',
     sources: 'Sources: boundaries from OCHA COD-AB, 2025 population estimates from the Yemen Population Taskforce, via HDX.',
+
+    modes: 'View',
+    modeYemen: 'Yemen',
+    modeGhurba: 'Abroad',
+    ghurbaTitle: 'Ghurba Map',
+    ghurbaSearch: 'Search a governorate, city or country',
+    ghurbaIntro: 'Each line is a Yemeni abroad, drawn from their district in Yemen to the city they live in.',
+    ghurbaSources:
+      'No names or locations are kept: only the district and the city. Cities from GeoNames, land from Natural Earth, boundaries from OCHA COD-AB.',
+    loading: 'Loading…',
+    loadError: 'The lines could not be loaded right now. Try again later.',
+    empty: 'No lines yet. Be the first to draw yours.',
+    addLine: 'Draw your line',
+    myLine: 'Your line: from {from} to {to}',
+    myCard: 'My card',
+    topCities: 'Top cities',
+    topGovs: 'Where they come from',
+    messages: 'Messages from abroad',
+    messageFrom: 'From {gov}, in {city}',
+    whereGov: 'Where are the people of {gov}?',
+    whereCity: 'Where are the Yemenis of {city} from?',
+    people: 'People',
+    under3: 'Under 3',
+    countries: 'Countries',
+    cities: 'Cities',
+    noLinesGov: 'No lines from {gov} yet.',
+    noLinesCity: 'No lines to {city} yet.',
+    city: 'City',
+    country: 'Country',
+    counter: '{people} in {countries} and {cities}',
+    nPeople: { zero: 'No one', one: '1 Yemeni', other: '{n} Yemenis' },
+    nCountries: { one: '1 country', other: '{n} countries' },
+    nCities: { one: '1 city', other: '{n} cities' },
+    oneOf: 'You are one of {n} people from {gov} in {city}',
+    firstOf: 'You are the first from {gov} in {city}',
+
+    formTitle: 'Draw your line',
+    formPrivacy: 'We never ask for your name, email or location. Only your district and the city you live in are kept.',
+    fromLabel: 'Where are you from?',
+    pickGov: 'Governorate',
+    pickDistrict: 'District',
+    toLabel: 'Where do you live now?',
+    cityPlaceholder: 'Search your city in Arabic or English',
+    cityHelp: 'If your city is not listed, pick the nearest large city.',
+    messageLabel: 'A short message (optional)',
+    messagePlaceholder: 'I miss the rain in Ibb',
+    messageHelp: 'Shown after review. Do not include names or phone numbers.',
+    submit: 'Draw my line',
+    sending: 'Sending…',
+    close: 'Close',
+    errPick: 'Pick your district and city.',
+    errCheck: 'The check did not finish. If a check box appears, complete it, then try again.',
+    errLimit: 'A line was already added from this device today. Come back tomorrow.',
+    errTurnstile: 'The check failed. Please try again.',
+    errMessage: 'The message is longer than 80 characters or contains a link.',
+    errInvalid: 'Check the district and city.',
+    errSetup: 'This is not set up yet. Try again later.',
+    errNetwork: 'Could not connect. Please try again.',
+
+    cardBrand: 'Ghurba Map',
+    cardCall: 'Draw your line',
+    shareWhatsapp: 'WhatsApp',
+    shareStory: 'Story',
+    shareDownload: 'Download',
+    shareText: 'Draw your line on the Ghurba Map:',
+    cardAlt: 'A card showing your line from Yemen to your city',
   },
 };
 
@@ -52,4 +188,17 @@ const formatters = {
 
 export function fmt(n, lang) {
   return n == null ? '—' : formatters[lang].format(Math.round(n));
+}
+
+const pluralRules = { ar: new Intl.PluralRules('ar'), en: new Intl.PluralRules('en') };
+
+// Picks the plural form of a count ({ one, two, few, many, other }) and fills in {n}.
+export function plural(forms, n, lang) {
+  const form = forms[n === 0 && forms.zero ? 'zero' : pluralRules[lang].select(n)] ?? forms.other;
+  return form.replace('{n}', fmt(n, lang));
+}
+
+// Fills {name} placeholders.
+export function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '');
 }

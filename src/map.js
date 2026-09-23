@@ -2,6 +2,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // The package's exports map hides the prebuilt UMD file, so reference it by path.
 import rtlPluginUrl from '../node_modules/@mapbox/mapbox-gl-rtl-text/dist/mapbox-gl-rtl-text.js?url';
+import { createGlobe, ghurbaBottomLayers, ghurbaSources, ghurbaTopLayers } from './globe.js';
 
 // Arabic labels need the RTL plugin for shaping and right-to-left order.
 // Deferred: it downloads only once Arabic text is on the map.
@@ -15,8 +16,8 @@ const ASSETS = 'https://protomaps.github.io/basemaps-assets';
 const DETAIL_ZOOM = 6;
 
 export const YEMEN_BOUNDS = [41.8, 12.0, 54.6, 19.1];
-// Same area as region.pmtiles, so panning never runs off the base map.
-const MAX_BOUNDS = [
+// Same area as region.pmtiles, so panning never runs off the base map. Lifted in Ghurba mode.
+export const MAX_BOUNDS = [
   [20, -12],
   [78, 38],
 ];
@@ -80,7 +81,8 @@ async function basemap(lang) {
   return { sources, layers: style(lang), relabel: (l) => style(l, true) };
 }
 
-export async function createMap(container, lang, padding) {
+// lite: skip the costly effects (spinning, glow) on weak devices.
+export async function createMap(container, lang, padding, { lite = false } = {}) {
   const base = await basemap(lang);
   const hasBase = base.layers.length > 0;
   const src = (file) => `${import.meta.env.BASE_URL}data/${file}`;
@@ -106,8 +108,10 @@ export async function createMap(container, lang, padding) {
         districts: { type: 'geojson', data: src('districts.geojson'), promoteId: 'id' },
         'gov-labels': { type: 'geojson', data: src('governorate-labels.geojson') },
         'district-labels': { type: 'geojson', data: src('district-labels.geojson') },
+        ...ghurbaSources,
       },
       layers: [
+        ...ghurbaBottomLayers,
         ...(hasBase
           ? base.layers.filter((l) => l.type !== 'symbol')
           : [{ id: 'background', type: 'background', paint: { 'background-color': color.bg } }]),
@@ -190,6 +194,7 @@ export async function createMap(container, lang, padding) {
           },
           paint: { 'text-color': color.text, 'text-halo-color': color.halo, 'text-halo-width': 1.6 },
         },
+        ...ghurbaTopLayers,
       ],
     },
   });
@@ -209,11 +214,17 @@ export async function createMap(container, lang, padding) {
     new maplibregl.AttributionControl({ compact: true }),
   ];
 
+  const sources = { district: 'districts', gov: 'govs', city: 'g-cities' };
+
   const api = {
     map,
+    globe: createGlobe(map, { maxBounds: MAX_BOUNDS, lite }),
 
-    // Hit test under a point: the visible district first, then the governorate.
+    // Hit test under a point: a Ghurba city, then the visible district, then the governorate.
+    // Hidden layers never match, so this works in both modes.
     pick(point) {
+      const [c] = map.queryRenderedFeatures(point, { layers: ['g-cities'] });
+      if (c) return { type: 'city', id: c.properties.id };
       const [d] = map.queryRenderedFeatures(point, { layers: ['district-fill'] });
       if (d) return { type: 'district', id: d.properties.id };
       const [g] = map.queryRenderedFeatures(point, { layers: ['gov-fill'] });
@@ -222,7 +233,7 @@ export async function createMap(container, lang, padding) {
     },
 
     hover(hit) {
-      setHover(hit && { source: hit.type === 'district' ? 'districts' : 'govs', id: hit.id });
+      setHover(hit && { source: sources[hit.type], id: hit.id });
     },
 
     // govId and districtId may be null to go back up a level.
@@ -262,6 +273,7 @@ export async function createMap(container, lang, padding) {
       api.placeControls(l);
       map.setLayoutProperty('gov-label', 'text-field', ['get', l]);
       map.setLayoutProperty('district-label', 'text-field', ['get', l]);
+      api.globe.setLang(l);
       for (const layer of base.relabel?.(l) ?? []) {
         if (map.getLayer(layer.id)) map.setLayoutProperty(layer.id, 'text-field', layer.layout['text-field']);
       }
