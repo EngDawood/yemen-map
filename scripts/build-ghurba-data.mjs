@@ -1,7 +1,9 @@
 // Builds the Ghurba map data in public/data:
 //   cities.json   destination cities with Arabic and English names (GeoNames, CC BY 4.0)
 //   land.geojson  world land for the globe (Natural Earth, public domain)
-//   npm run data:ghurba
+//   seas.geojson  named seas and oceans, to name the sea under a ship (Natural Earth, public domain)
+//   npm run data:ghurba               everything
+//   npm run data:ghurba -- seas       only the parts named: cities, land, seas
 // Raw downloads (about 210 MB, mostly GeoNames alternate names) are cached in data-raw/.
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
@@ -18,6 +20,7 @@ const SOURCES = {
   cities: 'https://download.geonames.org/export/dump/cities15000.zip',
   names: 'https://download.geonames.org/export/dump/alternateNamesV2.zip',
   land: 'https://naciscdn.org/naturalearth/50m/physical/ne_50m_land.zip',
+  seas: 'https://naciscdn.org/naturalearth/50m/physical/ne_50m_geography_marine_polys.zip',
 };
 
 // Lowest population kept per country. Where most Yemenis abroad live the cut-off is low;
@@ -114,6 +117,17 @@ const NAME_FIX = {
   3529612: { ar: 'إيكاتيبيك' }, 3998655: { ar: 'ليون' }, 3530589: { ar: 'نيزاهوالكويوتل' },
   8581443: { ar: 'جنوب تانجيرانج' }, 1183460: { ar: 'بنو' }, 2246678: { ar: 'بيكين' },
   2244322: { ar: 'طوبى' }, 1842485: { ar: 'غويانغ' }, 426272: { ar: 'جيتيغا' }, 3042030: { ar: 'فادوز' },
+};
+
+// Sea names Natural Earth gets wrong (Syracuse for Sargasso, straits without "strait"), by
+// English name. The Gulf is named as the Arabic name already has it.
+const SEA_FIX = {
+  'Persian Gulf': { en: 'Arabian Gulf' },
+  'Sargasso Sea': { ar: 'بحر سارغاسو' },
+  'Florida Strait': { ar: 'مضيق فلوريدا' },
+  'Korea Strait': { ar: 'مضيق كوريا' },
+  'Gulf of Bothnia': { ar: 'خليج بوثنيا' },
+  'Seto Inland Sea': { ar: 'بحر سيتو الداخلي' },
 };
 
 async function download(url, file) {
@@ -306,11 +320,38 @@ async function buildLand() {
   console.log('wrote land.geojson');
 }
 
+async function buildSeas() {
+  const zip = join(raw, 'ne_50m_geography_marine_polys.zip');
+  await download(SOURCES.seas, zip);
+  const dir = join(raw, 'seas');
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir);
+  execFileSync('unzip', ['-o', '-q', zip, '-d', dir]);
+  // Only used to find which sea a point is in, so rough shapes do (about 50 KB). Rivers and reefs
+  // are not seas. The polygons do not overlap: a point is in one sea at most.
+  const tmp = join(dir, 'seas.geojson');
+  await mapshaper.runCommands(
+    `-i "${join(dir, 'ne_50m_geography_marine_polys.shp')}" -filter "featurecla != 'river' && featurecla != 'reef'" ` +
+      `-simplify 3% weighted keep-shapes -filter-fields name_ar,name_en -o "${tmp}" format=geojson precision=0.05`,
+  );
+  const features = JSON.parse(readFileSync(tmp, 'utf8'))
+    .features.filter((f) => f.geometry)
+    .map(({ properties: p, geometry }) => ({
+      type: 'Feature',
+      properties: { ar: SEA_FIX[p.name_en]?.ar ?? p.name_ar, en: SEA_FIX[p.name_en]?.en ?? p.name_en },
+      geometry,
+    }));
+  writeFileSync(join(out, 'seas.geojson'), JSON.stringify({ type: 'FeatureCollection', features }));
+  console.log(`wrote ${features.length} seas`);
+}
+
+const BUILDS = { cities: buildCities, land: buildLand, seas: buildSeas };
+
 async function main() {
   mkdirSync(raw, { recursive: true });
   mkdirSync(out, { recursive: true });
-  await buildCities();
-  await buildLand();
+  const only = process.argv.slice(2);
+  for (const [name, build] of Object.entries(BUILDS)) if (!only.length || only.includes(name)) await build();
 }
 
 main().catch((e) => {

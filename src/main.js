@@ -6,7 +6,6 @@ import { createIndex, search } from './search.js';
 import { strings, fmt } from './i18n.js';
 import { esc, stat, crumbs } from './ui.js';
 import { createGhurba } from './ghurba.js';
-import { addLineOpen } from './add-line.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -267,7 +266,7 @@ async function init() {
   } else render();
   mapApi.map.on('click', (e) => {
     const hit = mapApi.pick(e.point);
-    if (state.mode === 'ghurba') return ghurba.click(hit);
+    if (state.mode === 'ghurba') return ghurba.click(hit, e.lngLat);
     if (!hit) return go(null);
     if (hit.type === 'district') go(state.gov, hit.id);
     else go(hit.id);
@@ -323,7 +322,7 @@ async function init() {
 
   document.addEventListener('keydown', (e) => {
     const typing = e.target.closest?.('input, textarea, select, [contenteditable]');
-    if (addLineOpen() || typing) return;
+    if (typing) return;
     if (e.key === '/') {
       e.preventDefault();
       els.input.focus();
