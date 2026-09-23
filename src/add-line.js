@@ -490,7 +490,6 @@ export function createAddLine(ctx) {
     // A pick from the search box at the top of the panel.
     searchPick(hit) {
       if (hit.type === 'gov') pickGov(hit.id);
-      else if (hit.type === 'district') pickDistrict(hit.id);
       else if (hit.type === 'city') pickCity(hit.id);
     },
 

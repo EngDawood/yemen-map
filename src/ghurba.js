@@ -1,8 +1,6 @@
-// The Ghurba map: the map of Yemenis abroad, with Yemen's governorates and districts merged in.
-// Loads the aggregated lines, draws them on the globe and fills the side panel: the counter,
-// exploring by governorate, district or city, messages, the steps to draw your line, your journey
-// and your card — and under them the Yemen directory: the country's stats, governorates and
-// districts with their population figures.
+// Ghurba mode: the map of Yemenis abroad. Loads the aggregated lines, draws them on the globe
+// and fills the side panel: the counter, exploring by governorate or city, messages, the steps
+// to draw your line, your journey and your card.
 import { greatCircle } from './globe.js';
 import { createGhurbaIndex, search } from './search.js';
 import { strings, fmt, plural, fill } from './i18n.js';
@@ -34,9 +32,8 @@ function saveMine(m) {
 
 export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
   const globe = mapApi.globe;
-  // gov/district/city: exploring one place. adding: the steps to draw your line are open.
-  // mine: your journey and card.
-  const view = { gov: null, district: null, city: null, mine: false, adding: false };
+  // adding: the steps to draw your line are open. mine: your journey and card.
+  const view = { gov: null, city: null, mine: false, adding: false };
   let arriving = false; // just sent: the sentence waits until the journey arrives
   let status = 'idle'; // idle | loading | ready | error
   let cities = [];
@@ -52,17 +49,14 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
 
   const t = (k) => strings[state.lang][k];
   const nm = (item) => item.name[state.lang];
-  const otherName = (item) => item.name[state.lang === 'ar' ? 'en' : 'ar'];
   const govName = (id) => nm(data.governorates[id]);
-  const byName = (a, b) => nm(a).localeCompare(nm(b), state.lang);
   const districtName = (id) => nm(data.districts[id]);
   const cityName = (id) => (cityById.has(id) ? nm(cityById.get(id)) : '');
-  const density = (item) => (item.population ? fmt(item.population / item.area, state.lang) : '—');
   const listCount = (n) => (n >= SHOW_FROM ? fmt(n, state.lang) : '');
   const statCount = (n) => (n >= SHOW_FROM ? fmt(n, state.lang) : t('under3'));
   const origin = (d) => data.districts[d].center;
   const center = (c) => cityById.get(c).center;
-  const overview = () => !view.gov && !view.city && !view.district && !view.mine && !view.adding;
+  const overview = () => !view.gov && !view.city && !view.mine && !view.adding;
   // Lines saved before journeys had a way to travel are plain lines.
   const myJourney = () => journey(origin(mine.d), center(mine.c), mine.mode ?? 'direct');
 
@@ -77,9 +71,9 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     onAdded: added,
   });
 
-  globe.canSpin = () => overview();
+  globe.canSpin = () => state.mode === 'ghurba' && overview();
   for (const type of ['mousedown', 'touchstart', 'wheel']) {
-    mapApi.map.on(type, () => globe.pauseForUser());
+    mapApi.map.on(type, () => state.mode === 'ghurba' && globe.pauseForUser());
   }
 
   // ---------- data ----------
@@ -138,20 +132,6 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     return { byGov, byCity, total, countries, cities: byCity.size };
   }
 
-  // Where the people of one district are, counted by city — the district view's own totals.
-  function districtAgg(id) {
-    const cities = new Map();
-    const countries = new Set();
-    let total = 0;
-    for (const { d, c, n } of lines) {
-      if (d !== id) continue;
-      total += n;
-      cities.set(c, (cities.get(c) ?? 0) + n);
-      countries.add(cityById.get(c)?.country);
-    }
-    return { cities, total, countries: countries.size };
-  }
-
   // Each district-to-city pair is one feature, whatever its count; the count sets its width.
   function lineFeatures() {
     return lines.map(({ d, c, n }) => ({
@@ -176,32 +156,21 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
 
   // The map side of the current view: which lines, which cities, which governorates are lit.
   function applyView({ drawMine = true } = {}) {
-    // Also skipped while the data is still loading.
-    if (status === 'idle' || status === 'loading') return;
-    const { gov, city, district } = view;
-    globe.filterLines(district ? { district } : gov ? { gov } : city ? { city } : null);
-    const counts = district
-      ? districtAgg(district).cities
-      : gov
-        ? (agg.byGov.get(gov)?.cities ?? new Map())
-        : city
-          ? new Map([[city, agg.byCity.get(city)?.n ?? 0]])
-          : new Map([...agg.byCity].map(([id, c]) => [id, c.n]));
+    // Also skipped when the visitor left the globe while the data was loading.
+    if (state.mode !== 'ghurba' || status === 'idle' || status === 'loading') return;
+    const { gov, city } = view;
+    globe.filterLines(gov ? { gov } : city ? { city } : null);
+    const counts = gov
+      ? (agg.byGov.get(gov)?.cities ?? new Map())
+      : city
+        ? new Map([[city, agg.byCity.get(city)?.n ?? 0]])
+        : new Map([...agg.byCity].map(([id, c]) => [id, c.n]));
     globe.setCities(cityFeatures(counts), state.lang);
     globe.focus(view.mine || view.adding);
     if (view.adding) return; // the steps draw their own picks and preview
-    globe.highlightGovs(district || gov ? [district ? data.districts[district].gov : gov] : city ? [...(agg.byCity.get(city)?.govs.keys() ?? [])] : null);
-    // The chosen governorate's districts are named and clickable, the chosen one lit, so a
-    // district can be picked from the map as well as from the list.
-    globe.showPicker(district ? { gov: data.districts[district].gov, district } : gov ? { gov } : null);
+    globe.highlightGovs(gov ? [gov] : city ? [...(agg.byCity.get(city)?.govs.keys() ?? [])] : null);
     // Your journey, ends marked, in your own view; elsewhere your line is a plain line like the others.
-    const mineHere =
-      mine &&
-      (view.mine ||
-        overview() ||
-        district === mine.d ||
-        (!district && gov === mine.d.slice(0, 4)) ||
-        city === mine.c);
+    const mineHere = mine && (view.mine || overview() || gov === mine.d.slice(0, 4) || city === mine.c);
     globe.markFrom(mineHere && view.mine ? origin(mine.d) : null);
     globe.markTo(mineHere && view.mine ? center(mine.c) : null);
     if (!mineHere) globe.clearJourney();
@@ -211,12 +180,11 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     }
   }
 
-  function select({ gov = null, district = null, city = null, mine: showMine = false } = {}) {
+  function select({ gov = null, city = null, mine: showMine = false } = {}) {
     const wasOverview = overview();
     if (view.adding) steps.close();
     arriving = false;
-    if (district) gov = data.districts[district]?.gov ?? null; // a district brings its governorate
-    Object.assign(view, { gov, district, city, mine: showMine && !!mine, adding: false });
+    Object.assign(view, { gov, city, mine: showMine && !!mine, adding: false });
     applyView();
     if (view.city) globe.frameLine(YEMEN, center(view.city), padding());
     else if (view.mine) globe.frameLine(origin(mine.d), center(mine.c), padding());
@@ -228,7 +196,7 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
   function openSteps() {
     if (!cityById.size) return; // the cities did not load
     arriving = false;
-    Object.assign(view, { gov: null, district: null, city: null, mine: false, adding: true });
+    Object.assign(view, { gov: null, city: null, mine: false, adding: true });
     applyView();
     steps.open();
     render();
@@ -246,7 +214,7 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     else lines.push({ d, c, n: 1 });
     agg = aggregate();
     globe.setLines(lineFeatures());
-    Object.assign(view, { gov: null, district: null, city: null, mine: true, adding: false });
+    Object.assign(view, { gov: null, city: null, mine: true, adding: false });
     arriving = true;
     applyView({ drawMine: false });
     globe.clearJourney();
@@ -304,13 +272,6 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     </button></li>`;
   }
 
-  // A row of the Yemen directory: the name and its population.
-  function placeItem(type, item) {
-    return `<li><button type="button" data-${type}="${item.id}">
-      <span>${esc(nm(item))}</span><small>${fmt(item.population, state.lang)}</small>
-    </button></li>`;
-  }
-
   function messageList(list) {
     if (!list.length) return '';
     return `<h3>${t('messages')}</h3><ul class="messages">${list
@@ -322,13 +283,9 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
       .join('')}</ul>`;
   }
 
-  // The merged home: the Ghurba map first, then Yemen's own numbers and governorates.
   function renderOverview() {
     const top = [...agg.byCity].sort((a, b) => b[1].n - a[1].n).slice(0, 15);
     const govs = [...agg.byGov].sort((a, b) => b[1].n - a[1].n);
-    const yemenGovs = Object.values(data.governorates).sort(byName);
-    const total = yemenGovs.reduce((s, g) => s + g.population, 0);
-    const area = yemenGovs.reduce((s, g) => s + g.area, 0);
     return `
       <h2>${t('ghurbaTitle')}</h2>
       <p class="hint">${t('ghurbaIntro')}</p>
@@ -337,81 +294,26 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
       ${actions()}
       ${top.length ? `<h3>${t('topCities')}</h3><ul class="list">${top.map(([id, c]) => cityItem(id, c.n)).join('')}</ul>` : ''}
       ${govs.length ? `<h3>${t('topGovs')}</h3><ul class="list">${govs.map(([id, g]) => govItem(id, g.n)).join('')}</ul>` : ''}
-      ${messageList(messages)}
-      <h3>${t('yemen')}</h3>
-      <p class="hint">${t('hint')}</p>
-      <dl class="stats">
-        ${stat(t('population'), fmt(total, state.lang))}
-        ${stat(t('area'), fmt(area, state.lang), t('km2'))}
-        ${stat(t('governorates'), fmt(yemenGovs.length, state.lang))}
-        ${stat(t('districts'), fmt(Object.keys(data.districts).length, state.lang))}
-      </dl>
-      <ul class="list">${yemenGovs.map((g) => placeItem('gov', g)).join('')}</ul>`;
+      ${messageList(messages)}`;
   }
 
-  // The governorate's own numbers and districts (Yemen), then where its people are (Ghurba).
   function renderGov(id) {
-    const g = data.governorates[id];
-    const A = agg.byGov.get(id);
-    const list = A ? [...A.cities].sort((a, b) => b[1] - a[1]) : [];
+    const g = agg.byGov.get(id);
+    const list = g ? [...g.cities].sort((a, b) => b[1] - a[1]) : [];
     const countries = new Set(list.map(([c]) => cityById.get(c).country)).size;
-    const districts = g.districts.map((id) => data.districts[id]).sort(byName);
     const lang = state.lang;
     return `
       ${crumbs([[t('ghurbaTitle'), 'data-ghome'], [govName(id)]])}
       <p class="kind">${t('governorate')}</p>
-      <h2>${esc(govName(id))}</h2>
-      <p class="alt" lang="${lang === 'ar' ? 'en' : 'ar'}">${esc(otherName(g))}</p>
-      <dl class="stats">
-        ${stat(t('capital'), esc(g.capital[lang]))}
-        ${stat(t('population'), fmt(g.population, lang))}
-        ${stat(t('area'), fmt(g.area, lang), t('km2'))}
-        ${stat(t('density'), density(g), t('perKm2'))}
-      </dl>
-      <h3>${esc(fill(t('whereGov'), { gov: govName(id) }))}</h3>
+      <h2>${esc(fill(t('whereGov'), { gov: govName(id) }))}</h2>
       ${
-        A
-          ? `<dl class="stats">${stat(t('people'), statCount(A.n))}${stat(t('countries'), fmt(countries, lang))}${stat(t('cities'), fmt(list.length, lang))}</dl>`
+        g
+          ? `<dl class="stats">${stat(t('people'), statCount(g.n))}${stat(t('countries'), fmt(countries, lang))}${stat(t('cities'), fmt(list.length, lang))}</dl>`
           : `<p class="hint">${esc(fill(t('noLinesGov'), { gov: govName(id) }))}</p>`
       }
       ${mine ? '' : `<button type="button" class="primary" data-add>${t('addLine')}</button>`}
       ${list.length ? `<h3>${t('topCities')}</h3><ul class="list">${list.slice(0, 30).map(([c, n]) => cityItem(c, n)).join('')}</ul>` : ''}
-      <h3>${t('districts')} <small>(${fmt(districts.length, lang)})</small></h3>
-      <ul class="list">${districts.map((d) => placeItem('district', d)).join('')}</ul>
       ${messageList(messages.filter((m) => m.g === id))}`;
-  }
-
-  // The district's own numbers (Yemen), then where its people are (Ghurba).
-  function renderDistrict(id) {
-    const d = data.districts[id];
-    const g = data.governorates[d.gov];
-    const A = districtAgg(id);
-    const list = [...A.cities].sort((a, b) => b[1] - a[1]);
-    const lang = state.lang;
-    return `
-      ${crumbs([
-        [t('ghurbaTitle'), 'data-ghome'],
-        [govName(g.id), `data-gov="${g.id}"`],
-        [districtName(id)],
-      ])}
-      <p class="kind">${t('district')}</p>
-      <h2>${esc(districtName(id))}</h2>
-      <p class="alt" lang="${lang === 'ar' ? 'en' : 'ar'}">${esc(otherName(d))}</p>
-      <dl class="stats">
-        ${stat(t('governorate'), `<button type="button" class="link" data-gov="${g.id}">${esc(govName(g.id))}</button>`)}
-        ${stat(t('population'), d.population == null ? t('noData') : fmt(d.population, lang))}
-        ${stat(t('area'), fmt(d.area, lang), t('km2'))}
-        ${stat(t('density'), density(d), d.population ? t('perKm2') : '')}
-        ${d.idps ? stat(t('idps'), fmt(d.idps, lang)) : ''}
-      </dl>
-      <h3>${esc(fill(t('whereDistrict'), { district: districtName(id) }))}</h3>
-      ${
-        A.total
-          ? `<dl class="stats">${stat(t('people'), statCount(A.total))}${stat(t('countries'), fmt(A.countries, lang))}${stat(t('cities'), fmt(list.length, lang))}</dl>`
-          : `<p class="hint">${esc(fill(t('noLinesDistrict'), { district: districtName(id) }))}</p>`
-      }
-      ${mine ? '' : `<button type="button" class="primary" data-add>${t('addLine')}</button>`}
-      ${list.length ? `<h3>${t('topCities')}</h3><ul class="list">${list.slice(0, 30).map(([c, n]) => cityItem(c, n)).join('')}</ul>` : ''}`;
   }
 
   function renderCity(id) {
@@ -444,7 +346,7 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
     });
   }
 
-  const siteUrl = () => `${location.origin}/`;
+  const siteUrl = () => `${location.origin}/?view=ghurba`;
 
   function renderMine() {
     const path = crumbs([[t('ghurbaTitle'), 'data-ghome'], [t('myCard')]]);
@@ -498,35 +400,26 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
   }
 
   function render() {
+    if (state.mode !== 'ghurba') return;
     if (view.adding) return steps.render(body);
     const showMine = view.mine && mine && status !== 'loading' && cityById.has(mine.c);
     body.innerHTML = showMine
       ? renderMine()
       : status === 'idle' || status === 'loading'
         ? renderOverview()
-        : view.district
-          ? renderDistrict(view.district)
-          : view.city
-            ? renderCity(view.city)
-            : view.gov
-              ? renderGov(view.gov)
-              : renderOverview();
+        : view.city
+          ? renderCity(view.city)
+          : view.gov
+            ? renderGov(view.gov)
+            : renderOverview();
     body.scrollTop = 0;
     if (showMine) fillCard().catch((err) => console.error('Card failed', err));
   }
 
   return {
-    // Boots the globe and the panel, on the overview or on a place from the link.
     async enter(initial = {}) {
       arriving = false;
-      const district = initial.district && data.districts[initial.district] ? initial.district : null;
-      Object.assign(view, {
-        gov: district ? data.districts[district].gov : (initial.gov ?? null),
-        district,
-        city: district ? null : (initial.city ?? null),
-        mine: false,
-        adding: false,
-      });
+      Object.assign(view, { gov: initial.gov ?? null, city: initial.city ?? null, mine: false, adding: false });
       globe.enter(padding());
       render();
       if (status === 'idle' || status === 'error') {
@@ -535,6 +428,13 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
       } else applyView();
       if (view.city && cityById.has(view.city)) globe.frameLine(YEMEN, center(view.city), padding());
       else if (view.city) select({});
+    },
+
+    leave() {
+      steps.close();
+      view.adding = false;
+      arriving = false;
+      globe.leave();
     },
 
     render,
@@ -549,34 +449,26 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
 
     hitLabel(hit) {
       if (hit.type === 'gov') return { name: govName(hit.id), sub: t('governorate') };
-      if (hit.type === 'district') {
-        const d = data.districts[hit.id];
-        return { name: nm(d), sub: `${t('district')} · ${govName(d.gov)}` };
-      }
       const c = cityById.get(hit.id);
       return { name: nm(c), sub: countryName(c.country, state.lang) };
     },
 
     choose(hit) {
       if (view.adding) return steps.searchPick(hit);
-      if (hit.type === 'gov') select({ gov: hit.id });
-      else if (hit.type === 'district') select({ district: hit.id });
-      else select({ city: hit.id });
+      select(hit.type === 'gov' ? { gov: hit.id } : { city: hit.id });
     },
 
-    // A click on the globe: a city, one of Yemen's governorates or districts, or empty space.
-    // While the steps are open it picks for them instead.
+    // A click on the globe: a city, one of Yemen's governorates, or empty space. While the steps
+    // are open it picks for them instead.
     click(hit, lngLat) {
       if (view.adding) return steps.mapClick(hit, lngLat);
       if (hit?.type === 'city') select({ city: hit.id });
-      else if (hit?.type === 'district') select({ district: hit.id });
       else if (hit?.type === 'gov') select({ gov: hit.id });
       else if (!overview()) select({});
     },
 
     panelClick(b) {
       if ('ghome' in b.dataset) select({});
-      else if (b.dataset.district) select({ district: b.dataset.district });
       else if (b.dataset.city) select({ city: b.dataset.city });
       else if (b.dataset.gov) select({ gov: b.dataset.gov });
       else if ('add' in b.dataset) openSteps();
@@ -584,22 +476,18 @@ export function createGhurba({ state, data, mapApi, body, padding, onChange }) {
       else if (b.id === 'share-story') shareStory();
     },
 
-    // Escape closes the question on the map, or goes back up: district to governorate,
-    // anything else to the overview.
+    // Escape closes the question on the map, or goes back to the overview.
     back() {
       if (view.adding && steps.back()) return true;
       if (overview()) return false;
-      if (view.district) select({ gov: view.gov });
-      else select({});
+      select({});
       return true;
     },
 
-    // For the address bar: ?gov=<slug>, plus &district=<id> or &city=<GeoNames id>.
+    // For the address bar: ?view=ghurba, plus &gov=<slug> or &city=<GeoNames id>.
     params() {
-      const p = new URLSearchParams();
-      const gov = view.district ? data.districts[view.district].gov : view.gov;
-      if (gov) p.set('gov', data.governorates[gov].slug);
-      if (view.district) p.set('district', view.district);
+      const p = new URLSearchParams({ view: 'ghurba' });
+      if (view.gov) p.set('gov', data.governorates[view.gov].slug);
       if (view.city) p.set('city', view.city);
       return p;
     },

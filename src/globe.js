@@ -1,6 +1,6 @@
-// The globe the map turns into: a great-circle line from each district to each city over
-// Yemen's governorates. The layers live in the map style from the start (hidden); the globe
-// shows its own set and turns on the projection when it takes over at boot.
+// Ghurba mode on the map: a globe with a great-circle line from each district to each city.
+// The layers live in the map style from the start (hidden), so switching modes only toggles
+// visibility, projection and bounds.
 import maplibregl from 'maplibre-gl';
 import { geoDistance, geoInterpolate } from 'd3-geo';
 import { COLORS, ICONS } from './journey.js';
@@ -239,8 +239,8 @@ function vehicleElement() {
   return el;
 }
 
-export function createGlobe(map, { lite }) {
-  let entered = false; // set once the globe takes over the map
+export function createGlobe(map, { maxBounds, lite }) {
+  let saved = null; // Yemen-mode visibility and paint, restored on leave
   let spinning = false;
   let frame = 0;
   let last = 0;
@@ -294,12 +294,17 @@ export function createGlobe(map, { lite }) {
       return Math.log2((radius * 2 * Math.PI) / 512);
     },
 
-    // Takes over the map: the globe's own layers, the globe projection and its sky, and
-    // Yemen's governorates in the globe's palette as the place every line starts from.
     enter(padding) {
-      entered = true;
-      for (const l of layers()) show(l.id, GHURBA_IDS.has(l.id) || SHARED_IDS.has(l.id));
+      saved = {};
+      for (const l of layers()) {
+        saved[l.id] = map.getLayoutProperty(l.id, 'visibility') ?? 'visible';
+        show(l.id, GHURBA_IDS.has(l.id) || SHARED_IDS.has(l.id));
+      }
       api.focus(false);
+      saved.paint = {
+        'gov-fill': ['fill-color', 'fill-opacity'].map((p) => [p, map.getPaintProperty('gov-fill', p)]),
+        'gov-line': ['line-color', 'line-width'].map((p) => [p, map.getPaintProperty('gov-line', p)]),
+      };
       map.setPaintProperty('gov-fill', 'fill-opacity', 1);
       map.setPaintProperty('gov-line', 'line-color', color.yemenLine);
       map.setPaintProperty('gov-line', 'line-width', 0.6);
@@ -311,6 +316,23 @@ export function createGlobe(map, { lite }) {
       api.overview(padding, 1600);
     },
 
+    leave() {
+      api.stopSpin();
+      api.clearJourney();
+      api.markFrom(null);
+      api.markTo(null);
+      api.showPicker(null);
+      // The globe's camera padding would otherwise add to the Yemen view's own fitBounds padding.
+      map.stop();
+      map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 });
+      for (const [id, vis] of Object.entries(saved ?? {})) if (id !== 'paint' && map.getLayer(id)) show(id, vis !== 'none');
+      for (const [id, props] of Object.entries(saved?.paint ?? {})) for (const [p, v] of props) map.setPaintProperty(id, p, v);
+      saved = null;
+      map.getContainer().classList.remove('globe');
+      map.setProjection({ type: 'mercator' });
+      map.setMaxBounds(maxBounds);
+    },
+
     setLand(data) {
       map.getSource('g-land').setData(data);
     },
@@ -319,22 +341,16 @@ export function createGlobe(map, { lite }) {
       map.getSource('g-lines').setData({ type: 'FeatureCollection', features });
     },
 
-    // Only the lines of one governorate, one district or one city; null shows all.
+    // Only the lines of one governorate or one city; null shows all.
     filterLines(filter) {
-      const f = filter?.district
-        ? ['==', ['get', 'd'], filter.district]
-        : filter?.gov
-          ? ['==', ['get', 'g'], filter.gov]
-          : filter?.city
-            ? ['==', ['get', 'c'], filter.city]
-            : null;
+      const f = filter?.gov ? ['==', ['get', 'g'], filter.gov] : filter?.city ? ['==', ['get', 'c'], filter.city] : null;
       map.setFilter('g-lines', f);
       map.setFilter('g-glow', f);
     },
 
     // Everyone's lines fade back while the visitor's own journey is on show.
     focus(on) {
-      if (!entered) return;
+      if (!saved) return;
       map.setPaintProperty('g-lines', 'line-opacity', on ? 0.25 : 0.85);
       show('g-glow', !on && !lite);
     },
@@ -506,7 +522,7 @@ export function createGlobe(map, { lite }) {
     },
 
     startSpin() {
-      if (lite || spinning || !entered || !api.canSpin()) return;
+      if (lite || spinning || !saved || !api.canSpin()) return;
       spinning = true;
       last = 0;
       frame = requestAnimationFrame(tick);

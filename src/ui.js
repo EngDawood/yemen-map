@@ -1,4 +1,4 @@
-// Small HTML helpers shared by the panel views.
+// Small HTML helpers shared by the Yemen and Ghurba panels.
 
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 

@@ -4,7 +4,7 @@ export function normalize(s) {
   return s
     .normalize('NFKD')
     .toLowerCase()
-    .replace(/[ً-ٰٟـ]/g, '') // tashkeel, tatweel
+    .replace(/[ً-ٰٟـ]/g, '') // tashkeel, tatweel
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')
@@ -16,6 +16,18 @@ export function normalize(s) {
     .trim();
 }
 
+export function createIndex(data) {
+  const entries = [];
+  for (const g of Object.values(data.governorates)) {
+    const keys = [g.name.ar, g.name.en, g.slug, ...g.aliases];
+    entries.push({ type: 'gov', id: g.id, keys: [...new Set(keys.map(normalize))] });
+  }
+  for (const d of Object.values(data.districts)) {
+    entries.push({ type: 'district', id: d.id, keys: [normalize(d.name.ar), normalize(d.name.en)] });
+  }
+  return entries;
+}
+
 function score(key, q) {
   if (key === q) return 0;
   if (key.startsWith(q)) return 1;
@@ -24,17 +36,13 @@ function score(key, q) {
   return Infinity;
 }
 
-// Governorates, districts and destination cities in one list. A city is also found by its
-// country's name ("ماليزيا", "Malaysia"), ranked after direct name matches; cities are already
-// sorted by size.
+// Ghurba map: governorates and destination cities. A city is also found by its country's name
+// ("ماليزيا", "Malaysia"), ranked after direct name matches; cities are already sorted by size.
 export function createGhurbaIndex(data, cities, countryNames) {
   const entries = [];
   for (const g of Object.values(data.governorates)) {
     const keys = [g.name.ar, g.name.en, g.slug, ...g.aliases];
     entries.push({ type: 'gov', id: g.id, keys: [...new Set(keys.map(normalize))] });
-  }
-  for (const d of Object.values(data.districts)) {
-    entries.push({ type: 'district', id: d.id, keys: [normalize(d.name.ar), normalize(d.name.en)] });
   }
   for (const c of cities) {
     const keys = [c.name.ar, c.name.en, ...(c.aliases ?? [])];

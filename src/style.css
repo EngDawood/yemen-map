@@ -273,6 +273,34 @@ h3 small {
   outline-offset: 2px;
 }
 
+/* ---------- mode switch ---------- */
+
+.modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.modes button {
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: none;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.modes button[aria-pressed='true'] {
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(60 45 20 / 0.2);
+  font-weight: 700;
+}
+
 /* ---------- Ghurba map ---------- */
 
 /* Space around the globe. */
@@ -821,5 +849,9 @@ h3 small {
   #map .maplibregl-ctrl-bottom-right,
   #map .maplibregl-ctrl-bottom-left {
     bottom: 48vh;
+  }
+
+  .modes {
+    margin-bottom: 8px;
   }
 }
